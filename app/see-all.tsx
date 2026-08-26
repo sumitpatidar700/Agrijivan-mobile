@@ -26,6 +26,8 @@ import { useCart } from "@/lib/cart-context";
 import { useCartFly } from "@/lib/cart-fly-context";
 import { CartBadge } from "@/components/ui/cart-badge";
 import type { Product } from "@/lib/agri-data";
+import { DUMMY_BOOKS, DUMMY_EQUIPMENT, DUMMY_MEDICINE, DUMMY_FEED } from "@/lib/coming-soon-data";
+import type { HomeProduct } from "@/components/home/product-section";
 
 const { width: SCREEN_WIDTH } = Dimensions.get("window");
 
@@ -82,6 +84,7 @@ type ListItem = {
   inStock?: boolean;
   link?: string;
   isProduct: boolean;
+  comingSoon?: boolean;
 };
 
 function productToListItem(p: Product): ListItem {
@@ -98,6 +101,26 @@ function productToListItem(p: Product): ListItem {
     isProduct: true,
   };
 }
+
+function dummyToListItem(p: HomeProduct): ListItem {
+  return {
+    id: p.id,
+    title: p.name || "",
+    subtitle: "Coming soon for your farming type",
+    image: p.image,
+    isProduct: false,
+    comingSoon: true,
+  };
+}
+
+// Sections that have a "Coming Soon" placeholder set to fall back to when
+// there's no real data for the active farming type yet.
+const DUMMY_BY_SECTION: Record<string, HomeProduct[]> = {
+  books: DUMMY_BOOKS,
+  equipment: DUMMY_EQUIPMENT,
+  medicine: DUMMY_MEDICINE,
+  feed: DUMMY_FEED,
+};
 
 export default function SeeAllScreen() {
   const router = useRouter();
@@ -128,14 +151,22 @@ export default function SeeAllScreen() {
         .map(productToListItem);
     }
     if (!config.productSection) return [];
-    return (dbProducts ?? [])
+    const real = (dbProducts ?? [])
       .filter(
         (p) =>
           p.section === config.productSection &&
           (!activeFarming || (p.item_ids || []).includes(activeFarming.id)),
       )
       .map(productToListItem);
-  }, [config, dbProducts, activeFarming, isSearchMode]);
+
+    // No real data for this farming type yet -> show "Coming Soon" placeholders
+    // (only once product data has actually finished loading, not while empty=loading).
+    if (real.length === 0 && !productsLoading) {
+      const dummy = DUMMY_BY_SECTION[config.productSection];
+      if (dummy) return dummy.map(dummyToListItem);
+    }
+    return real;
+  }, [config, dbProducts, activeFarming, isSearchMode, productsLoading]);
 
   const items = useMemo(() => {
     let result = allItems;
@@ -199,6 +230,7 @@ export default function SeeAllScreen() {
         style={[
           styles.card,
           { width: CARD_WIDTH, marginRight: index % NUM_COLUMNS === 0 ? CARD_GAP : 0 },
+          item.comingSoon && styles.cardComingSoon,
         ]}
       >
         <Pressable style={styles.cardMain} onPress={() => handlePressItem(item)} disabled={!isPressable}>
@@ -209,10 +241,16 @@ export default function SeeAllScreen() {
               style={styles.image}
               resizeMode="cover"
             />
-            {!!item.discountPct && (
-              <View style={styles.discountBadge}>
-                <Text style={styles.discountBadgeText}>{item.discountPct}% OFF</Text>
+            {item.comingSoon ? (
+              <View style={[styles.discountBadge, { backgroundColor: colors.textMuted }]}>
+                <Text style={styles.discountBadgeText}>COMING SOON</Text>
               </View>
+            ) : (
+              !!item.discountPct && (
+                <View style={styles.discountBadge}>
+                  <Text style={styles.discountBadgeText}>{item.discountPct}% OFF</Text>
+                </View>
+              )
             )}
             {!item.isProduct && item.link && (
               <View style={styles.playOverlay}>
@@ -495,6 +533,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     marginBottom: CARD_GAP,
     overflow: "hidden",
+  },
+  cardComingSoon: {
+    opacity: 0.75,
   },
   cardMain: {
     flex: 1,

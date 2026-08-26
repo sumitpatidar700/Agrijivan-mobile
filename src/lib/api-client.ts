@@ -20,7 +20,8 @@ export async function apiFetch<T = any>(
     throw new Error(body.message || body.error || `API error ${res.status}`);
   }
 
-  return res.json();
+  const text = await res.text();
+  return text ? JSON.parse(text) : (null as unknown as T);
 }
 
 export async function apiGet<T = any>(path: string): Promise<T> {

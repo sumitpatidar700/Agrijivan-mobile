@@ -14,8 +14,6 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
 import { useCart } from "@/lib/cart-context";
 import { apiPost } from "@/lib/api-client";
@@ -24,7 +22,7 @@ import { OrderSuccessModal, type CompletedOrder } from "@/components/checkout/or
 import { colors, radius, shadow } from "@/lib/theme";
 import { fetchAddresses, type Address } from "@/api/addresses";
 
-type PaymentMethod = "cod" | "online";
+type PaymentMethod = "cod" | "razorpay";
 
 type CartItem = {
   id: string;
@@ -121,65 +119,70 @@ export default function CartScreen() {
     setShowAddressModal(true);
   };
 
-  // Writes the order to Supabase + the local fallback registry and clears the cart.
-  // Called once payment is settled - either immediately for COD, or after Razorpay
-  // verification succeeds for online payments.
-  const finalizeOrder = async () => {
+  // Writes the order via the backend (which fans it out across the orders /
+  // order_items / order_addresses / order_payments tables) and clears the
+  // ordered items from the cart. Called once payment is settled - either
+  // immediately for COD, or after Razorpay verification succeeds online.
+  const finalizeOrder = async (paymentDetails?: { razorpayOrderId: string; razorpayPaymentId: string }) => {
     if (!user || !selectedAddress || selectedCartItems.length === 0) return;
 
-    const addressString = `${selectedAddress.name}, ${selectedAddress.village}, ${selectedAddress.city}, ${selectedAddress.state} - ${selectedAddress.pinCode}`;
-
-    const orderId = "ORD-" + Math.random().toString(36).substring(2, 9).toUpperCase();
-    const supabase = getSupabaseClient();
     const totalAmount = getSubtotal();
+    const customerName = user.user_metadata?.name || (user.email ? user.email.split("@")[0] : "Farmer");
+    const paymentStatus = paymentMethod === "razorpay" ? "paid" : "pending";
 
-    // 1. Save to Supabase remote database
-    if (supabase) {
-      try {
-        const { error } = await (supabase.from("orders") as any).insert({
-          id: orderId,
-          customer_email: user.email || `${user.phone}@agrijivan.com`,
-          customer_name: user.user_metadata?.name || (user.email ? user.email.split("@")[0] : "Farmer"),
-          items: JSON.stringify(selectedCartItems),
-          total: totalAmount,
-          status: "Processing",
-          created_at: new Date().toISOString(),
-          delivery_address: addressString,
-          delivery_phone: selectedAddress?.phone || user.phone || null,
-        });
-        if (error) console.warn("Supabase order insert error:", error.message);
-      } catch (err) {
-        console.warn("Failed to save order to Supabase:", err);
-      }
+    let result: { success: boolean; orderId?: string; orderNumber?: string; error?: string };
+    try {
+      result = await apiPost("/orders", {
+        userId: user.id,
+        customerName,
+        customerEmail: user.email || null,
+        customerPhone: selectedAddress.phone || user.phone || "",
+        items: selectedCartItems.map((item) => ({
+          productId: item.id,
+          productName: item.title,
+          productImage: item.image || null,
+          quantity: item.quantity,
+          unitPrice: item.price,
+        })),
+        subtotal: totalAmount,
+        totalAmount,
+        paymentMethod,
+        paymentStatus,
+        razorpayOrderId: paymentDetails?.razorpayOrderId || null,
+        razorpayPaymentId: paymentDetails?.razorpayPaymentId || null,
+        address: {
+          name: selectedAddress.name,
+          phone: selectedAddress.phone,
+          line1: selectedAddress.village,
+          village: selectedAddress.village,
+          city: selectedAddress.city,
+          state: selectedAddress.state,
+          pincode: selectedAddress.pinCode,
+        },
+      });
+    } catch (err: any) {
+      console.warn("Failed to save order:", err);
+      Alert.alert("Order Failed", "Couldn't place your order. Please try again.");
+      return;
     }
 
-    // 2. Save to local fallback registry
-    try {
-      const userKey = user.email || user.phone || "guest";
-      const orderKey = `agrijivan-orders-${userKey}`;
-      const currentOrdersStr = await AsyncStorage.getItem(orderKey);
-      const currentOrders = currentOrdersStr ? JSON.parse(currentOrdersStr) : [];
-      currentOrders.push({
-        id: orderId,
-        date: new Date().toISOString(),
-        items: [...selectedCartItems],
-        total: totalAmount,
-        status: "Processing",
-        customerName: user.user_metadata?.name || (user.email ? user.email.split("@")[0] : "Farmer"),
-        deliveryAddress: addressString
-      });
-      await AsyncStorage.setItem(orderKey, JSON.stringify(currentOrders));
+    if (!result.success || !result.orderId) {
+      console.warn("Failed to save order:", result.error);
+      Alert.alert("Order Failed", result.error || "Couldn't place your order. Please try again.");
+      return;
+    }
 
-      // Remove only the items that were actually ordered - anything left
-      // unselected stays in the cart for next time.
+    // Remove only the items that were actually ordered - anything left
+    // unselected stays in the cart for next time.
+    try {
       await removeItems(selectedCartItems.map((item) => item.id));
     } catch (err) {
-      console.warn("Failed to save order or clear cart:", err);
+      console.warn("Failed to clear ordered items from cart:", err);
     }
 
     setShowAddressModal(false);
     setCompletedOrder({
-      id: orderId,
+      id: result.orderNumber || result.orderId,
       itemCount: selectedCartItems.length,
       total: totalAmount,
       paymentMethod,
@@ -263,7 +266,7 @@ export default function CartScreen() {
       });
       console.log("[checkout] verify response:", result);
       if (result.success) {
-        await finalizeOrder();
+        await finalizeOrder({ razorpayOrderId: razorpayOrder.orderId, razorpayPaymentId: paymentId });
       } else {
         Alert.alert(
           "Payment",
@@ -614,13 +617,13 @@ export default function CartScreen() {
                 <Text style={styles.paymentOptionText}>Cash on Delivery</Text>
               </Pressable>
               <Pressable
-                style={[styles.paymentOption, paymentMethod === "online" && styles.paymentOptionSelected]}
-                onPress={() => setPaymentMethod("online")}
+                style={[styles.paymentOption, paymentMethod === "razorpay" && styles.paymentOptionSelected]}
+                onPress={() => setPaymentMethod("razorpay")}
               >
                 <Ionicons
-                  name={paymentMethod === "online" ? "radio-button-on" : "radio-button-off"}
+                  name={paymentMethod === "razorpay" ? "radio-button-on" : "radio-button-off"}
                   size={20}
-                  color={paymentMethod === "online" ? colors.primary : colors.textMuted}
+                  color={paymentMethod === "razorpay" ? colors.primary : colors.textMuted}
                 />
                 <Ionicons name="card-outline" size={18} color={colors.textMuted} />
                 <Text style={styles.paymentOptionText}>Pay Online (Card / UPI / Netbanking)</Text>

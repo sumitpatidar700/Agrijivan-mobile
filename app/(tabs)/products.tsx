@@ -53,12 +53,9 @@ export default function CoursesScreen() {
   return (
     <View style={styles.screen}>
       {/* Header */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <View style={styles.headerTopRow}>
-          <Pressable style={styles.headerIconBtn} onPress={() => router.back()}>
-            <Ionicons name="chevron-back" size={22} color="#fff" />
-          </Pressable>
-          <View style={{ alignItems: "center" }}>
+          <View style={{ flex: 1 }}>
             <Text style={styles.headerTitle}>{farmingName} Courses</Text>
             <Text style={styles.headerSubtitle}>Learn • Grow • Earn</Text>
           </View>
@@ -68,8 +65,9 @@ export default function CoursesScreen() {
         </View>
       </View>
 
-      <ScrollView showsVerticalScrollIndicator={false} style={styles.scrollBody}>
-        <View style={styles.content}>
+      {/* Rounded content shell - fixed in place, only the scroll area inside it moves */}
+      <View style={styles.content}>
+        <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContent}>
         {/* Hero banner */}
         <View style={styles.hero}>
           <Image source={{ uri: HERO_IMAGE }} style={styles.heroImage} resizeMode="cover" />
@@ -145,8 +143,8 @@ export default function CoursesScreen() {
             </View>
           )}
         </View>
-        </View>
-      </ScrollView>
+        </ScrollView>
+      </View>
     </View>
   );
 }
@@ -158,13 +156,12 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.header,
-    paddingHorizontal: 12,
-    paddingBottom: 40,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
   },
   headerTopRow: {
     flexDirection: "row",
     alignItems: "center",
-    justifyContent: "space-between",
   },
   headerIconBtn: {
     width: 40,
@@ -180,24 +177,23 @@ const styles = StyleSheet.create({
     color: "#fff",
   },
   headerSubtitle: {
-    fontSize: 11,
+    fontSize: 12,
     color: "rgba(255,255,255,0.8)",
     fontWeight: "600",
-    marginTop: 2,
+    marginTop: 3,
     letterSpacing: 0.5,
   },
-  scrollBody: {
-    flex: 1,
-    backgroundColor: colors.header,
-    marginTop: -24, // overlap the header, so the rounded top of `content` tucks under it
-  },
   content: {
+    flex: 1,
     backgroundColor: colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
+    marginTop: -24, // overlap the header, so the rounded top tucks under it - fixed in place, doesn't scroll
     overflow: "hidden",
+  },
+  scrollContent: {
     padding: 16,
-    paddingBottom: 40,
+    paddingBottom: 100,
   },
   hero: {
     height: 120,

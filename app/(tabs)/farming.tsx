@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
+  Alert,
   Image,
   Modal,
   Pressable,
@@ -18,6 +19,7 @@ import { colors, radius, shadow } from "@/lib/theme";
 import { useActiveFarming } from "@/lib/active-farming-context";
 import { useYoutubeVideosQuery } from "@/api";
 import { VideoListCard, type VideoCardData } from "@/components/videos/video-list-card";
+import { DUMMY_VIDEOS } from "@/lib/coming-soon-data";
 
 // Used only if no farming is selected yet / the active farming has no image of its own.
 const FALLBACK_HEADER_IMAGE =
@@ -69,15 +71,19 @@ export default function FarmingVideosScreen() {
     [farmingVideos],
   );
 
+  // No real videos for this farming type yet -> show clearly-labeled "Coming
+  // Soon" placeholders instead of an empty page.
+  const displayCards = cards.length > 0 ? cards : DUMMY_VIDEOS;
+
   // Filter chips are built from whatever categories actually exist for this farming's
   // videos - not a hardcoded list, since categories are freeform (set by the admin).
   const filters = useMemo(() => {
-    const unique = Array.from(new Set(cards.map((c) => c.category).filter(Boolean))) as string[];
+    const unique = Array.from(new Set(displayCards.map((c) => c.category).filter(Boolean))) as string[];
     return [{ id: "all", label: "All" }, ...unique.sort().map((c) => ({ id: c, label: c }))];
-  }, [cards]);
+  }, [displayCards]);
 
   const filteredVideos = useMemo(() => {
-    let result = activeFilter === "all" ? cards : cards.filter((c) => c.category === activeFilter);
+    let result = activeFilter === "all" ? displayCards : displayCards.filter((c) => c.category === activeFilter);
 
     const q = search.trim().toLowerCase();
     if (q) {
@@ -94,17 +100,21 @@ export default function FarmingVideosScreen() {
       );
     }
     return result;
-  }, [cards, activeFilter, search, sortKey]);
+  }, [displayCards, activeFilter, search, sortKey]);
 
-  const handleOpenVideo = (id: string) => {
-    router.push({ pathname: "/(tabs)/video-details", params: { id } });
+  const handleOpenVideo = (video: VideoCardData) => {
+    if (video.comingSoon) {
+      Alert.alert("Coming Soon", "Videos for this farming type aren't live yet - check back soon!");
+      return;
+    }
+    router.push({ pathname: "/(tabs)/video-details", params: { id: video.id } });
   };
 
   return (
     <View style={styles.screen}>
       {/* Header - full-bleed photo of the active farming, same image used in the
           farming-selector, with a color layer so the title stays readable. */}
-      <View style={[styles.header, { paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
         <Image
           source={{ uri: activeFarming?.image || FALLBACK_HEADER_IMAGE }}
           style={styles.headerImage}
@@ -120,31 +130,8 @@ export default function FarmingVideosScreen() {
         </View>
       </View>
 
+      {/* Rounded content shell - fixed in place, only the scroll area inside it moves */}
       <View style={styles.content}>
-        {/* Search + sort */}
-        <View style={styles.searchRow}>
-          <View style={styles.searchBar}>
-            <Ionicons name="search" size={18} color={colors.textMuted} />
-            <TextInput
-              placeholder="Search videos..."
-              placeholderTextColor={colors.textMuted}
-              style={styles.searchInput}
-              value={search}
-              onChangeText={setSearch}
-              returnKeyType="search"
-            />
-            {search.length > 0 && (
-              <Pressable onPress={() => setSearch("")} hitSlop={8}>
-                <Ionicons name="close-circle" size={18} color={colors.textMuted} />
-              </Pressable>
-            )}
-          </View>
-
-          <Pressable style={styles.sortButton} onPress={() => setSortOpen(true)}>
-            <Ionicons name="swap-vertical" size={18} color={colors.text} />
-          </Pressable>
-        </View>
-
         <Modal
           visible={sortOpen}
           transparent
@@ -175,45 +162,64 @@ export default function FarmingVideosScreen() {
           </Pressable>
         </Modal>
 
-        {/* Filter chips */}
-        {filters.length > 1 && (
-          <View style={styles.filterRow}>
-            {filters.map((filter) => {
-              const isActive = filter.id === activeFilter;
-              return (
-                <Pressable
-                  key={filter.id}
-                  style={[styles.filterChip, isActive && styles.filterChipActive]}
-                  onPress={() => setActiveFilter(filter.id)}
-                >
-                  <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
-                    {filter.label}
-                  </Text>
-                </Pressable>
-              );
-            })}
-          </View>
-        )}
-
-        {/* Video list */}
         {isLoading ? (
           <View style={styles.emptyContainer}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
         ) : (
           <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.list}>
+            {/* Search + sort - scrolls together with the cards below */}
+            <View style={styles.searchRow}>
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={18} color={colors.textMuted} />
+                <TextInput
+                  placeholder="Search videos..."
+                  placeholderTextColor={colors.textMuted}
+                  style={styles.searchInput}
+                  value={search}
+                  onChangeText={setSearch}
+                  returnKeyType="search"
+                />
+                {search.length > 0 && (
+                  <Pressable onPress={() => setSearch("")} hitSlop={8}>
+                    <Ionicons name="close-circle" size={18} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+
+              <Pressable style={styles.sortButton} onPress={() => setSortOpen(true)}>
+                <Ionicons name="swap-vertical" size={18} color={colors.text} />
+              </Pressable>
+            </View>
+
+            {/* Filter chips */}
+            {filters.length > 1 && (
+              <View style={styles.filterRow}>
+                {filters.map((filter) => {
+                  const isActive = filter.id === activeFilter;
+                  return (
+                    <Pressable
+                      key={filter.id}
+                      style={[styles.filterChip, isActive && styles.filterChipActive]}
+                      onPress={() => setActiveFilter(filter.id)}
+                    >
+                      <Text style={[styles.filterChipText, isActive && styles.filterChipTextActive]}>
+                        {filter.label}
+                      </Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            )}
+
             {filteredVideos.map((video) => (
-              <VideoListCard key={video.id} video={video} onPress={() => handleOpenVideo(video.id)} />
+              <VideoListCard key={video.id} video={video} onPress={() => handleOpenVideo(video)} />
             ))}
             {filteredVideos.length === 0 && (
               <View style={styles.emptyContainer}>
                 <Ionicons name="videocam-outline" size={56} color={colors.textMuted} />
                 <Text style={styles.emptyText}>
-                  {cards.length === 0
-                    ? `No videos added for ${farmingName} yet.`
-                    : search.trim()
-                      ? "No videos match your search"
-                      : "No videos in this category"}
+                  {search.trim() ? "No videos match your search" : "No videos in this category"}
                 </Text>
               </View>
             )}
@@ -232,7 +238,7 @@ const styles = StyleSheet.create({
   header: {
     backgroundColor: colors.header,
     paddingHorizontal: 20,
-    paddingBottom: 44,
+    paddingBottom: 34,
     overflow: "hidden",
     position: "relative",
   },
@@ -250,7 +256,7 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   headerTitle: {
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: "800",
     color: "#fff",
   },
@@ -272,8 +278,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     alignItems: "center",
     gap: 8,
-    marginHorizontal: 16,
-    marginTop: 18,
   },
   searchBar: {
     flex: 1,
@@ -338,9 +342,6 @@ const styles = StyleSheet.create({
     flexDirection: "row",
     flexWrap: "wrap",
     gap: 8,
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 4,
   },
   filterChip: {
     paddingHorizontal: 16,

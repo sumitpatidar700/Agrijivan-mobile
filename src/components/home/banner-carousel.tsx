@@ -1,25 +1,28 @@
 import React, { useState, useRef, useEffect } from "react";
 import {
-  Dimensions,
   Image,
+  ImageSourcePropType,
   Pressable,
   ScrollView,
   StyleSheet,
   Text,
+  useWindowDimensions,
   View,
 } from "react-native";
 
 import { colors, radius } from "@/lib/theme";
 import { t } from "@/lib/home-translations";
 
-const { width: SCREEN_WIDTH } = Dimensions.get("window");
+const BANNER_HORIZONTAL_PADDING = 14;
+// home1/2/3.png are all a native 16:7 aspect ratio.
+const BANNER_ASPECT_RATIO = 16 / 7;
 
 type BannerDef = {
   id: string;
   line1Key: "banner1Line1" | "banner2Line1" | "banner3Line1";
   line2Key: "banner1Line2" | "banner2Line2" | "banner3Line2";
   ctaKey: "banner1Cta" | "banner2Cta" | "banner3Cta";
-  image: string;
+  image: ImageSourcePropType;
   bgColor: string;
 };
 
@@ -29,7 +32,7 @@ const banners: BannerDef[] = [
     line1Key: "banner1Line1",
     line2Key: "banner1Line2",
     ctaKey: "banner1Cta",
-    image: "https://images.unsplash.com/photo-1516467508483-a7212febe31a?w=800&q=80",
+    image: require("../../../assets/home1.png"),
     bgColor: "#1e6040",
   },
   {
@@ -37,7 +40,7 @@ const banners: BannerDef[] = [
     line1Key: "banner2Line1",
     line2Key: "banner2Line2",
     ctaKey: "banner2Cta",
-    image: "https://images.unsplash.com/photo-1548199973-03cce0bbc87b?w=800&q=80",
+    image: require("../../../assets/home2.png"),
     bgColor: "#1a237e",
   },
   {
@@ -45,7 +48,7 @@ const banners: BannerDef[] = [
     line1Key: "banner3Line1",
     line2Key: "banner3Line2",
     ctaKey: "banner3Cta",
-    image: "https://images.unsplash.com/photo-1500382017468-9049fed747ef?w=800&q=80",
+    image: require("../../../assets/home3.png"),
     bgColor: "#4e342e",
   },
 ];
@@ -56,20 +59,22 @@ type BannerCarouselProps = {
 };
 
 export function BannerCarousel({ locale, onCtaPress }: BannerCarouselProps) {
+  const { width: screenWidth } = useWindowDimensions();
+  const bannerHeight = (screenWidth - BANNER_HORIZONTAL_PADDING * 2) / BANNER_ASPECT_RATIO;
   const [activeIndex, setActiveIndex] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
 
   useEffect(() => {
     const interval = setInterval(() => {
       const next = (activeIndex + 1) % banners.length;
-      scrollRef.current?.scrollTo({ x: next * SCREEN_WIDTH, animated: true });
+      scrollRef.current?.scrollTo({ x: next * screenWidth, animated: true });
       setActiveIndex(next);
     }, 3500);
     return () => clearInterval(interval);
-  }, [activeIndex]);
+  }, [activeIndex, screenWidth]);
 
   const handleScroll = (e: any) => {
-    const idx = Math.round(e.nativeEvent.contentOffset.x / SCREEN_WIDTH);
+    const idx = Math.round(e.nativeEvent.contentOffset.x / screenWidth);
     setActiveIndex(idx);
   };
 
@@ -84,14 +89,15 @@ export function BannerCarousel({ locale, onCtaPress }: BannerCarouselProps) {
         scrollEventThrottle={16}
       >
         {banners.map((banner) => (
-          <View key={banner.id} style={styles.banner}>
+          <View key={banner.id} style={[styles.banner, { width: screenWidth, height: bannerHeight }]}>
             <View style={[styles.bannerInner, { backgroundColor: banner.bgColor }]}>
               <Image
-                source={{ uri: banner.image }}
+                source={banner.image}
                 style={styles.bannerImage}
-                resizeMode="cover"
+                resizeMode="contain"
+                fadeDuration={0}
               />
-              <View style={styles.overlay} />
+              <View style={styles.overlay} pointerEvents="none" />
               <View style={styles.bannerContent}>
                 <Text style={styles.bannerTitle}>{t(locale, banner.line1Key)}</Text>
                 <Text style={styles.bannerTitle}>{t(locale, banner.line2Key)}</Text>
@@ -126,9 +132,7 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   banner: {
-    width: SCREEN_WIDTH,
-    height: 130,
-    paddingHorizontal: 14,
+    paddingHorizontal: BANNER_HORIZONTAL_PADDING,
   },
   bannerInner: {
     flex: 1,
@@ -137,7 +141,8 @@ const styles = StyleSheet.create({
     position: "relative",
   },
   bannerImage: {
-    ...StyleSheet.absoluteFillObject,
+    width: "100%",
+    height: "100%",
   },
   overlay: {
     ...StyleSheet.absoluteFillObject,
@@ -146,11 +151,11 @@ const styles = StyleSheet.create({
   bannerContent: {
     position: "absolute",
     left: 0,
-    top: 0,
+    right: 0,
     bottom: 0,
-    width: "65%",
     paddingHorizontal: 16,
-    justifyContent: "center",
+    paddingBottom: 22,
+    justifyContent: "flex-end",
   },
   bannerTitle: {
     color: "#fff",

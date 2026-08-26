@@ -1,5 +1,5 @@
-import { useMemo } from "react";
-import { ActivityIndicator, Alert, Image, Pressable, ScrollView, StyleSheet, Text, View } from "react-native";
+import { useMemo, useState } from "react";
+import { ActivityIndicator, Alert, Image, Modal, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
@@ -15,6 +15,15 @@ import {
 } from "@/api/buy-sell";
 
 const FALLBACK_PHOTO = "https://images.unsplash.com/photo-1500937386664-56d1dfef3854?w=500&q=80";
+
+type SortOption = "newest" | "oldest" | "price_high" | "price_low";
+
+const SORT_OPTIONS: { value: SortOption; label: string }[] = [
+  { value: "newest", label: "Newest First" },
+  { value: "oldest", label: "Oldest First" },
+  { value: "price_high", label: "Price: High to Low" },
+  { value: "price_low", label: "Price: Low to High" },
+];
 
 function formatPostedAt(iso: string) {
   const d = new Date(iso);
@@ -155,7 +164,37 @@ export default function MyTradePostsScreen() {
 
   const { data: posts, isLoading } = useMyTradePostsQuery(user?.id);
 
-  const sorted = useMemo(() => posts ?? [], [posts]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [sortOption, setSortOption] = useState<SortOption>("newest");
+  const [sortMenuOpen, setSortMenuOpen] = useState(false);
+
+  const hasAnyPosts = (posts ?? []).length > 0;
+
+  const filteredSorted = useMemo(() => {
+    const all = posts ?? [];
+    const query = searchQuery.trim().toLowerCase();
+    const filtered = query
+      ? all.filter(
+          (p) => p.title.toLowerCase().includes(query) || p.farmingItemName.toLowerCase().includes(query)
+        )
+      : all;
+
+    const priceOf = (p: TradePost) => parseFloat(p.price) || 0;
+
+    return [...filtered].sort((a, b) => {
+      switch (sortOption) {
+        case "oldest":
+          return new Date(a.createdAt).getTime() - new Date(b.createdAt).getTime();
+        case "price_high":
+          return priceOf(b) - priceOf(a);
+        case "price_low":
+          return priceOf(a) - priceOf(b);
+        case "newest":
+        default:
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
+      }
+    });
+  }, [posts, searchQuery, sortOption]);
 
   return (
     <View style={styles.screen}>
@@ -172,20 +211,77 @@ export default function MyTradePostsScreen() {
           <View style={styles.centered}>
             <ActivityIndicator size="large" color={colors.primary} />
           </View>
-        ) : sorted.length === 0 ? (
+        ) : !hasAnyPosts ? (
           <View style={styles.centered}>
             <Ionicons name="document-text-outline" size={40} color={colors.textMuted} />
             <Text style={styles.emptyTitle}>No posts yet</Text>
             <Text style={styles.emptyDesc}>Posts you create in Buy &amp; Sell will show up here.</Text>
           </View>
         ) : (
-          <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
-            {sorted.map((post) => (
-              <PostRow key={post.id} post={post} />
-            ))}
-          </ScrollView>
+          <>
+            <View style={styles.searchSortRow}>
+              <View style={styles.searchBar}>
+                <Ionicons name="search" size={17} color={colors.textMuted} />
+                <TextInput
+                  style={styles.searchInput}
+                  placeholder="Search your posts..."
+                  placeholderTextColor={colors.textMuted}
+                  value={searchQuery}
+                  onChangeText={setSearchQuery}
+                />
+                {searchQuery !== "" && (
+                  <Pressable onPress={() => setSearchQuery("")} hitSlop={8}>
+                    <Ionicons name="close-circle" size={17} color={colors.textMuted} />
+                  </Pressable>
+                )}
+              </View>
+              <Pressable style={styles.sortBtn} onPress={() => setSortMenuOpen(true)}>
+                <Ionicons name="swap-vertical" size={16} color={colors.primary} />
+                <Text style={styles.sortBtnText}>Sort</Text>
+              </Pressable>
+            </View>
+
+            {filteredSorted.length === 0 ? (
+              <View style={styles.centered}>
+                <Ionicons name="search-outline" size={40} color={colors.textMuted} />
+                <Text style={styles.emptyTitle}>No matching posts</Text>
+                <Text style={styles.emptyDesc}>Try a different search term.</Text>
+              </View>
+            ) : (
+              <ScrollView contentContainerStyle={styles.list} showsVerticalScrollIndicator={false}>
+                {filteredSorted.map((post) => (
+                  <PostRow key={post.id} post={post} />
+                ))}
+              </ScrollView>
+            )}
+          </>
         )}
       </View>
+
+      <Modal visible={sortMenuOpen} transparent animationType="fade" onRequestClose={() => setSortMenuOpen(false)}>
+        <Pressable style={styles.sortMenuOverlay} onPress={() => setSortMenuOpen(false)}>
+          <View style={styles.sortMenuSheet}>
+            <Text style={styles.sortMenuTitle}>Sort by</Text>
+            {SORT_OPTIONS.map((opt) => (
+              <Pressable
+                key={opt.value}
+                style={styles.sortMenuOption}
+                onPress={() => {
+                  setSortOption(opt.value);
+                  setSortMenuOpen(false);
+                }}
+              >
+                <Text
+                  style={[styles.sortMenuOptionText, sortOption === opt.value && styles.sortMenuOptionTextActive]}
+                >
+                  {opt.label}
+                </Text>
+                {sortOption === opt.value && <Ionicons name="checkmark" size={18} color={colors.primary} />}
+              </Pressable>
+            ))}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -220,6 +316,81 @@ const styles = StyleSheet.create({
     borderTopRightRadius: 24,
     marginTop: -24,
     overflow: "hidden",
+  },
+  searchSortRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingTop: 16,
+  },
+  searchBar: {
+    flex: 1,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: colors.surface,
+    borderRadius: radius.md,
+    paddingHorizontal: 12,
+    height: 42,
+    borderWidth: 1,
+    borderColor: colors.border,
+    gap: 8,
+  },
+  searchInput: {
+    flex: 1,
+    fontSize: 13.5,
+    color: colors.text,
+    padding: 0,
+    height: "100%",
+  },
+  sortBtn: {
+    flexDirection: "row",
+    alignItems: "center",
+    gap: 5,
+    height: 42,
+    paddingHorizontal: 14,
+    borderRadius: radius.md,
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.surface,
+  },
+  sortBtnText: {
+    fontSize: 13,
+    fontWeight: "700",
+    color: colors.primary,
+  },
+  sortMenuOverlay: {
+    flex: 1,
+    backgroundColor: "rgba(0,0,0,0.4)",
+    justifyContent: "flex-end",
+  },
+  sortMenuSheet: {
+    backgroundColor: colors.surface,
+    borderTopLeftRadius: 24,
+    borderTopRightRadius: 24,
+    paddingHorizontal: 20,
+    paddingTop: 20,
+    paddingBottom: 32,
+  },
+  sortMenuTitle: {
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: 8,
+  },
+  sortMenuOption: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    paddingVertical: 14,
+  },
+  sortMenuOptionText: {
+    fontSize: 14,
+    fontWeight: "700",
+    color: colors.text,
+  },
+  sortMenuOptionTextActive: {
+    color: colors.primary,
   },
   centered: {
     flex: 1,

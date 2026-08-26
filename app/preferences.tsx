@@ -18,16 +18,16 @@ import { colors, radius } from "@/lib/theme";
 
 const FALLBACK_LANGUAGES = [
   { code: "en", label: "English", nativeLabel: "English" },
-  { code: "hi", label: "Hindi", nativeLabel: "??????" },
-  { code: "te", label: "Telugu", nativeLabel: "??????" },
-  { code: "kn", label: "Kannada", nativeLabel: "?????" },
-  { code: "ta", label: "Tamil", nativeLabel: "?????" },
-  { code: "bn", label: "Bengali", nativeLabel: "?????" },
-  { code: "or", label: "Odia", nativeLabel: "?????" },
-  { code: "ml", label: "Malayalam", nativeLabel: "??????" },
-  { code: "as", label: "Assamese", nativeLabel: "???????" },
-  { code: "mr", label: "Marathi", nativeLabel: "?????" },
-  { code: "pa", label: "Punjabi", nativeLabel: "??????" },
+  { code: "hi", label: "Hindi", nativeLabel: "हिंदी" },
+  { code: "te", label: "Telugu", nativeLabel: "తెలుగు" },
+  { code: "kn", label: "Kannada", nativeLabel: "ಕನ್ನಡ" },
+  { code: "ta", label: "Tamil", nativeLabel: "தமிழ்" },
+  { code: "bn", label: "Bengali", nativeLabel: "বাংলা" },
+  { code: "or", label: "Odia", nativeLabel: "ଓଡ଼ିଆ" },
+  { code: "ml", label: "Malayalam", nativeLabel: "മലയാളം" },
+  { code: "as", label: "Assamese", nativeLabel: "অসমীয়া" },
+  { code: "mr", label: "Marathi", nativeLabel: "मराठी" },
+  { code: "pa", label: "Punjabi", nativeLabel: "ਪੰਜਾਬੀ" },
 ];
 
 export default function PreferencesScreen() {
@@ -112,7 +112,7 @@ export default function PreferencesScreen() {
       <ScrollView showsVerticalScrollIndicator={false} contentContainerStyle={styles.scrollContainer}>
         <View
           style={{
-            backgroundColor: "#064e3b",
+            backgroundColor: colors.header,
             position: "absolute",
             top: -1000,
             height: 1450,
@@ -128,7 +128,7 @@ export default function PreferencesScreen() {
           </Pressable>
           <Text style={styles.brandTitle}>Update Preferences</Text>
           <Text style={styles.brandSubtitle}>
-            {step === 1 ? "Step 1 of 2 � Language Region" : "Step 2 of 2 � Farming Interests"}
+            {step === 1 ? "Step 1 of 2 - Language Region" : "Step 2 of 2 - Farming Interests"}
           </Text>
         </View>
 
@@ -166,15 +166,6 @@ export default function PreferencesScreen() {
                   })}
                 </View>
               </View>
-
-              <Pressable
-                style={[styles.submitButton, !selectedLanguage && styles.submitButtonDisabled]}
-                onPress={() => selectedLanguage && setStep(2)}
-                disabled={!selectedLanguage}
-              >
-                <Text style={styles.submitButtonText}>Next</Text>
-                <Ionicons name="arrow-forward" size={18} color="#ffffff" />
-              </Pressable>
             </View>
           ) : (
             <View style={styles.stepContainer}>
@@ -225,7 +216,7 @@ export default function PreferencesScreen() {
                                 <Image source={{ uri: item.image }} style={styles.itemImage} resizeMode="cover" />
                               ) : (
                                 <View style={[styles.itemImage, styles.itemImagePlaceholder]}>
-                                  <Text style={styles.itemImagePlaceholderText}>??</Text>
+                                  <Text style={styles.itemImagePlaceholderText}>🌾</Text>
                                 </View>
                               )}
                               <Text style={[styles.itemName, isSelected && styles.itemNameActive]} numberOfLines={2}>
@@ -252,35 +243,48 @@ export default function PreferencesScreen() {
                   );
                 })}
               </View>
-
-              <View>
-                {selectedItem && <Text style={styles.selectionCount}>Farming topic selected ?</Text>}
-                <Pressable
-                  style={[styles.submitButton, (!selectedItem || isSubmitting) && styles.submitButtonDisabled]}
-                  onPress={handleSubmit}
-                  disabled={!selectedItem || isSubmitting}
-                >
-                  {isSubmitting ? (
-                    <ActivityIndicator size="small" color="#ffffff" />
-                  ) : (
-                    <>
-                      <Text style={styles.submitButtonText}>Save Preferences</Text>
-                      <Ionicons name="checkmark-done" size={18} color="#ffffff" />
-                    </>
-                  )}
-                </Pressable>
-              </View>
             </View>
           )}
         </View>
       </ScrollView>
+
+      {/* Sticky footer CTA - stays fixed at the bottom of the screen instead of scrolling with content */}
+      <View style={[styles.stickyFooter, { paddingBottom: insets.bottom + 14 }]}>
+        {step === 1 ? (
+          <Pressable
+            style={[styles.submitButton, !selectedLanguage && styles.submitButtonDisabled]}
+            onPress={() => selectedLanguage && setStep(2)}
+            disabled={!selectedLanguage}
+          >
+            <Text style={styles.submitButtonText}>Next</Text>
+            <Ionicons name="arrow-forward" size={18} color="#ffffff" />
+          </Pressable>
+        ) : (
+          <>
+            <Pressable
+              style={[styles.submitButton, (!selectedItem || isSubmitting) && styles.submitButtonDisabled]}
+              onPress={handleSubmit}
+              disabled={!selectedItem || isSubmitting}
+            >
+              {isSubmitting ? (
+                <ActivityIndicator size="small" color="#ffffff" />
+              ) : (
+                <>
+                  <Text style={styles.submitButtonText}>Save Preferences</Text>
+                  <Ionicons name="checkmark-done" size={18} color="#ffffff" />
+                </>
+              )}
+            </Pressable>
+          </>
+        )}
+      </View>
     </View>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#ffffff" },
-  scrollContainer: { flexGrow: 1, backgroundColor: "#ffffff" },
+  scrollContainer: { flexGrow: 1, backgroundColor: "#ffffff", paddingBottom: 100 },
   centerContent: {
     flex: 1,
     justifyContent: "center",
@@ -295,7 +299,7 @@ const styles = StyleSheet.create({
     fontWeight: "600",
   },
   header: {
-    backgroundColor: "#064e3b",
+    backgroundColor: colors.header,
     alignItems: "center",
     paddingBottom: 24,
     position: "relative",
@@ -319,7 +323,19 @@ const styles = StyleSheet.create({
     paddingTop: 28,
     paddingBottom: 40,
   },
-  stepContainer: { flex: 1, justifyContent: "space-between" },
+  stepContainer: { flex: 1 },
+  stickyFooter: {
+    backgroundColor: "#ffffff",
+    paddingHorizontal: 20,
+    paddingTop: 14,
+    borderTopWidth: 1,
+    borderTopColor: "#e2e8f0",
+    shadowColor: "#000",
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 8,
+    elevation: 8,
+  },
   sectionTitle: { fontSize: 16, fontWeight: "800", color: "#064e3b" },
   sectionSubtitle: {
     fontSize: 12,
@@ -341,7 +357,7 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     position: "relative",
   },
-  languageCardActive: { borderColor: "#10b981", backgroundColor: "#f0fdf4" },
+  languageCardActive: { borderColor: colors.header, backgroundColor: "#f0fdf4" },
   langCheck: {
     position: "absolute",
     top: 6,
@@ -349,7 +365,7 @@ const styles = StyleSheet.create({
     width: 18,
     height: 18,
     borderRadius: 9,
-    backgroundColor: "#10b981",
+    backgroundColor: colors.header,
     alignItems: "center",
     justifyContent: "center",
   },
@@ -388,7 +404,7 @@ const styles = StyleSheet.create({
     position: "relative",
     paddingBottom: 8,
   },
-  itemCardActive: { borderColor: "#10b981", backgroundColor: "#f0fdf4" },
+  itemCardActive: { borderColor: colors.header, backgroundColor: "#f0fdf4" },
   itemImage: { width: "100%", height: 120, backgroundColor: "#e2e8f0" },
   itemImagePlaceholder: {
     alignItems: "center",
@@ -409,20 +425,15 @@ const styles = StyleSheet.create({
     position: "absolute",
     top: 6,
     right: 6,
-    backgroundColor: "#10b981",
+    backgroundColor: colors.header,
     borderRadius: 10,
     width: 20,
     height: 20,
     alignItems: "center",
     justifyContent: "center",
     zIndex: 10,
-  },
-  selectionCount: {
-    textAlign: "center",
-    fontSize: 12,
-    fontWeight: "700",
-    color: "#10b981",
-    marginBottom: 8,
+    borderWidth: 2.5,
+    borderColor: "#ffffff",
   },
   errorBox: {
     flexDirection: "row",
@@ -451,15 +462,14 @@ const styles = StyleSheet.create({
   },
   viewAllText: { fontSize: 12, fontWeight: "700", color: "#10b981" },
   submitButton: {
-    backgroundColor: "#10b981",
+    backgroundColor: colors.header,
     height: 52,
     borderRadius: radius.pill,
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     gap: 8,
-    marginTop: 12,
-    shadowColor: "#10b981",
+    shadowColor: colors.header,
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.2,
     shadowRadius: 8,

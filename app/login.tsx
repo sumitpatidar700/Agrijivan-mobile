@@ -24,36 +24,38 @@ export default function LoginScreen({ hideBackButton = false }: { hideBackButton
       style={styles.screen}
       behavior={Platform.OS === "ios" ? "padding" : "height"}
     >
-      {/* Dark Green Header background section */}
-      <View style={[styles.headerSection, { paddingTop: insets.top + 20 }]}>
-        {!hideBackButton && (
-          <Pressable
-            style={[styles.floatingBackBtn, { top: insets.top + 12 }]}
-            onPress={() => router.back()}
-          >
-            <Ionicons name="arrow-back" size={24} color="#ffffff" />
-          </Pressable>
-        )}
+      <ScrollView
+        showsVerticalScrollIndicator={false}
+        contentContainerStyle={styles.outerScrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
+        {/* Dark Green Header background section - scrolls with the form when the keyboard opens */}
+        <View style={[styles.headerSection, { paddingTop: insets.top + 20 }]}>
+          {!hideBackButton && (
+            <Pressable
+              style={[styles.floatingBackBtn, { top: insets.top + 12 }]}
+              onPress={() => router.back()}
+            >
+              <Ionicons name="arrow-back" size={24} color="#ffffff" />
+            </Pressable>
+          )}
 
-        <View style={styles.brandContainer}>
-          <View style={styles.logoBadge}>
-            <Logo width={48} height={48} />
+          <View style={styles.brandContainer}>
+            <View style={styles.logoBadge}>
+              <Logo width={34} height={34} />
+            </View>
+            <Text style={styles.brandName}>AgriJivan</Text>
+            <Text style={styles.brandSub}>Smart Farming, Better Yield</Text>
           </View>
-          <Text style={styles.brandName}>AgriJivan</Text>
-          <Text style={styles.brandSub}>Smart Farming, Better Yield</Text>
         </View>
-      </View>
 
-      {/* Overlapping Content Card */}
-      <View style={styles.contentCard}>
-        <ScrollView
-          showsVerticalScrollIndicator={false}
-          contentContainerStyle={styles.scrollContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          <LoginForm onSuccess={() => router.replace("/(tabs)")} isEmbedded />
-        </ScrollView>
-      </View>
+        {/* Overlapping Content Card */}
+        <View style={styles.contentCard}>
+          <View style={styles.scrollContent}>
+            <LoginForm onSuccess={() => router.replace("/(tabs)")} isEmbedded />
+          </View>
+        </View>
+      </ScrollView>
     </KeyboardAvoidingView>
   );
 }
@@ -63,10 +65,13 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: "#ffffff",
   },
+  outerScrollContent: {
+    flexGrow: 1,
+  },
   headerSection: {
-    backgroundColor: "#064e3b",
+    backgroundColor: colors.header,
     alignItems: "center",
-    paddingBottom: 48,
+    paddingBottom: 68,
     position: "relative",
   },
   floatingBackBtn: {
@@ -112,17 +117,12 @@ const styles = StyleSheet.create({
     backgroundColor: "#ffffff",
     borderTopLeftRadius: 36,
     borderTopRightRadius: 36,
-    marginTop: -20,
+    marginTop: -40,
     position: "relative",
-    shadowColor: "#000",
-    shadowOffset: { width: 0, height: -8 },
-    shadowOpacity: 0.08,
-    shadowRadius: 12,
-    elevation: 6,
+    overflow: "hidden",
   },
 
   scrollContent: {
-    flexGrow: 1,
     paddingHorizontal: 24,
     paddingTop: 32,
     paddingBottom: 40,

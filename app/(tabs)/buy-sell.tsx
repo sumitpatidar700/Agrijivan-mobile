@@ -2,6 +2,7 @@ import { useMemo, useState } from "react";
 import {
   ActivityIndicator,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -18,6 +19,7 @@ import { useTradePostsQuery } from "@/api/buy-sell";
 import { PostCard } from "@/components/buy-sell/post-card";
 import { PostTypeModal } from "@/components/buy-sell/post-type-modal";
 import { PostKind } from "@/lib/trade-post-data";
+import { getDummyTradePosts } from "@/lib/coming-soon-data";
 
 export default function BuySellScreen() {
   const router = useRouter();
@@ -27,13 +29,19 @@ export default function BuySellScreen() {
   const [activeTab, setActiveTab] = useState<PostKind>("buy");
 
   const { activeFarming, isLoading: farmingLoading } = useActiveFarming();
-  const { data: posts, isLoading: postsLoading } = useTradePostsQuery(activeFarming?.id);
-
-  const buyPosts = useMemo(() => (posts ?? []).filter((p) => p.kind === "buy"), [posts]);
-  const sellPosts = useMemo(() => (posts ?? []).filter((p) => p.kind === "sell"), [posts]);
-  const visiblePosts = activeTab === "buy" ? buyPosts : sellPosts;
+  const { data: posts, isLoading: postsLoading, refetch, isRefetching } = useTradePostsQuery(activeFarming?.id);
 
   const farmingName = activeFarming?.name || "Farming";
+  const isLoading = farmingLoading || postsLoading;
+
+  // No real listings for this farming type yet -> show clearly-labeled "Coming
+  // Soon" placeholders instead of an empty page.
+  const realPosts = posts ?? [];
+  const displayPosts = !isLoading && realPosts.length === 0 ? getDummyTradePosts(farmingName) : realPosts;
+
+  const buyPosts = useMemo(() => displayPosts.filter((p) => p.kind === "buy"), [displayPosts]);
+  const sellPosts = useMemo(() => displayPosts.filter((p) => p.kind === "sell"), [displayPosts]);
+  const visiblePosts = activeTab === "buy" ? buyPosts : sellPosts;
 
   const openPostTypeModal = () => setModalVisible(true);
 
@@ -46,98 +54,102 @@ export default function BuySellScreen() {
     });
   };
 
-  const isLoading = farmingLoading || postsLoading;
-
   return (
     <View style={styles.screen}>
-      <ScrollView showsVerticalScrollIndicator={false}>
-        {/* ── Header banner ─────────────────────────────────────── */}
-        <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
-          <View style={styles.headerContent}>
-            <View style={{ flex: 1 }}>
-              <Text style={styles.headerTitle}>Marketplace</Text>
-              <Text style={styles.headerSubtitle}>Buy &amp; sell within the {farmingName.toLowerCase()} community</Text>
-            </View>
-            {!!user && (
-              <Pressable
-                style={styles.headerIconBtn}
-                onPress={() => router.push("/my-trade-posts")}
-                hitSlop={8}
-              >
-                <Ionicons name="time-outline" size={22} color="#fff" />
-              </Pressable>
-            )}
-            {!!activeFarming && (
-              <Pressable style={styles.headerAddBtn} onPress={openPostTypeModal} hitSlop={8}>
-                <Ionicons name="add" size={18} color="#fff" />
-                <Text style={styles.headerAddBtnText}>Create Post</Text>
-              </Pressable>
-            )}
+      {/* ── Header banner - fixed above the scroll area, doesn't drag with content ── */}
+      <View style={[styles.header, { paddingTop: insets.top + 16 }]}>
+        <View style={styles.headerContent}>
+          <View style={{ flex: 1 }}>
+            <Text style={styles.headerTitle}>Trading</Text>
+            <Text style={styles.headerSubtitle}>Buy &amp; sell within the {farmingName.toLowerCase()}</Text>
           </View>
-        </View>
-
-        <View style={styles.content}>
-          {!activeFarming && !farmingLoading ? (
-            <View style={styles.emptyState}>
-              <Ionicons name="leaf-outline" size={40} color={colors.textMuted} />
-              <Text style={styles.emptyTitle}>Select a farming type</Text>
-              <Text style={styles.emptyDesc}>
-                Choose an active farming from the sidebar to see and post buy/sell listings for it.
-              </Text>
-            </View>
-          ) : isLoading ? (
-            <View style={styles.emptyState}>
-              <ActivityIndicator size="large" color={colors.primary} />
-            </View>
-          ) : (
-            <>
-              {/* ── Buy / Sell tab switcher ─────────────────── */}
-              <View style={styles.tabRow}>
-                <Pressable
-                  style={[styles.tabBtn, activeTab === "buy" && styles.tabBtnActive]}
-                  onPress={() => setActiveTab("buy")}
-                >
-                  <Ionicons name="cart" size={15} color={activeTab === "buy" ? "#fff" : colors.textMuted} />
-                  <Text style={[styles.tabBtnText, activeTab === "buy" && styles.tabBtnTextActive]}>
-                    Buy ({buyPosts.length})
-                  </Text>
-                </Pressable>
-                <Pressable
-                  style={[styles.tabBtn, activeTab === "sell" && styles.tabBtnActive]}
-                  onPress={() => setActiveTab("sell")}
-                >
-                  <Ionicons name="pricetag" size={15} color={activeTab === "sell" ? "#fff" : colors.textMuted} />
-                  <Text style={[styles.tabBtnText, activeTab === "sell" && styles.tabBtnTextActive]}>
-                    Sell ({sellPosts.length})
-                  </Text>
-                </Pressable>
-              </View>
-
-              <View style={styles.sectionHeader}>
-                <Text style={styles.sectionSubtitle}>
-                  {activeTab === "buy"
-                    ? `Find quality ${farmingName.toLowerCase()} listings`
-                    : `Sell your ${farmingName.toLowerCase()} produce or stock`}
-                </Text>
-              </View>
-
-              {visiblePosts.length > 0 ? (
-                <View style={styles.postsList}>
-                  {visiblePosts.map((post) => (
-                    <PostCard key={post.id} post={post} />
-                  ))}
-                </View>
-              ) : (
-                <View style={styles.sectionEmpty}>
-                  <Text style={styles.sectionEmptyText}>
-                    No {activeTab} posts yet for {farmingName.toLowerCase()}.
-                  </Text>
-                </View>
-              )}
-            </>
+          {!!user && (
+            <Pressable
+              style={styles.headerIconBtn}
+              onPress={() => router.push("/my-trade-posts")}
+              hitSlop={8}
+            >
+              <Ionicons name="time-outline" size={22} color="#fff" />
+            </Pressable>
+          )}
+          {!!activeFarming && (
+            <Pressable style={styles.headerAddBtn} onPress={openPostTypeModal} hitSlop={8}>
+              <Ionicons name="add" size={18} color="#fff" />
+              <Text style={styles.headerAddBtnText}>Create Post</Text>
+            </Pressable>
           )}
         </View>
-      </ScrollView>
+      </View>
+
+      {/* ── Rounded content shell - fixed in place, only the list inside it scrolls ── */}
+      <View style={styles.content}>
+        {!activeFarming && !farmingLoading ? (
+          <View style={styles.emptyState}>
+            <Ionicons name="leaf-outline" size={40} color={colors.textMuted} />
+            <Text style={styles.emptyTitle}>Select a farming type</Text>
+            <Text style={styles.emptyDesc}>
+              Choose an active farming from the sidebar to see and post buy/sell listings for it.
+            </Text>
+          </View>
+        ) : isLoading ? (
+          <View style={styles.emptyState}>
+            <ActivityIndicator size="large" color={colors.primary} />
+          </View>
+        ) : (
+          <ScrollView
+            style={styles.postsScroll}
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.listScrollContent}
+            refreshControl={
+              <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor={colors.primary} colors={[colors.primary]} />
+            }
+          >
+            {/* ── Buy / Sell tab switcher - scrolls together with the cards below ── */}
+            <View style={styles.tabRow}>
+              <Pressable
+                style={[styles.tabBtn, activeTab === "buy" && styles.tabBtnActive]}
+                onPress={() => setActiveTab("buy")}
+              >
+                <Ionicons name="cart" size={15} color={activeTab === "buy" ? "#fff" : colors.textMuted} />
+                <Text style={[styles.tabBtnText, activeTab === "buy" && styles.tabBtnTextActive]}>
+                  Buy ({buyPosts.length})
+                </Text>
+              </Pressable>
+              <Pressable
+                style={[styles.tabBtn, activeTab === "sell" && styles.tabBtnActive]}
+                onPress={() => setActiveTab("sell")}
+              >
+                <Ionicons name="pricetag" size={15} color={activeTab === "sell" ? "#fff" : colors.textMuted} />
+                <Text style={[styles.tabBtnText, activeTab === "sell" && styles.tabBtnTextActive]}>
+                  Sell ({sellPosts.length})
+                </Text>
+              </Pressable>
+            </View>
+
+            <View style={styles.sectionHeader}>
+              <Text style={styles.sectionSubtitle}>
+                {activeTab === "buy"
+                  ? `Find quality ${farmingName.toLowerCase()} listings`
+                  : `Sell your ${farmingName.toLowerCase()} produce or stock`}
+              </Text>
+            </View>
+
+            {visiblePosts.length > 0 ? (
+              <View style={styles.postsList}>
+                {visiblePosts.map((post) => (
+                  <PostCard key={post.id} post={post} />
+                ))}
+              </View>
+            ) : (
+              <View style={styles.sectionEmpty}>
+                <Text style={styles.sectionEmptyText}>
+                  No {activeTab} posts yet for {farmingName.toLowerCase()}.
+                </Text>
+              </View>
+            )}
+          </ScrollView>
+        )}
+      </View>
 
       <PostTypeModal
         visible={modalVisible}
@@ -156,8 +168,8 @@ const styles = StyleSheet.create({
   },
   header: {
     backgroundColor: colors.header,
-    paddingHorizontal: 16,
-    paddingBottom: 30,
+    paddingHorizontal: 20,
+    paddingBottom: 34,
   },
   headerContent: {
     flexDirection: "row",
@@ -199,14 +211,20 @@ const styles = StyleSheet.create({
     fontWeight: "700",
   },
   content: {
+    flex: 1,
     backgroundColor: colors.background,
     borderTopLeftRadius: 24,
     borderTopRightRadius: 24,
-    marginTop: -24,
+    marginTop: -24, // overlap the header, so the rounded top tucks under it - fixed in place, doesn't scroll
     overflow: "hidden",
     paddingHorizontal: 14,
     paddingTop: 18,
-    paddingBottom: 32,
+  },
+  postsScroll: {
+    flex: 1,
+  },
+  listScrollContent: {
+    paddingBottom: 100,
   },
   tabRow: {
     flexDirection: "row",

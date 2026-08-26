@@ -10,6 +10,7 @@ export type VideoCardData = {
   summary: string;
   category: string | null;
   isPaid: boolean;
+  comingSoon?: boolean;
 };
 
 type VideoListCardProps = {
@@ -22,16 +23,22 @@ const FALLBACK_THUMB = "https://images.unsplash.com/photo-1500937386664-56d1dfef
 
 export function VideoListCard({ video, onPress, compact = false }: VideoListCardProps) {
   return (
-    <Pressable style={styles.card} onPress={onPress}>
+    <Pressable style={[styles.card, video.comingSoon && styles.cardComingSoon]} onPress={onPress}>
       <View style={[styles.thumbWrap, compact && styles.thumbWrapCompact]}>
         <Image source={{ uri: video.thumbnail || FALLBACK_THUMB }} style={styles.thumb} resizeMode="cover" />
         <View style={styles.playOverlay}>
           <Ionicons name="play" size={18} color="#fff" />
         </View>
-        {video.isPaid && (
-          <View style={styles.paidBadge}>
-            <Text style={styles.paidBadgeText}>PAID</Text>
+        {video.comingSoon ? (
+          <View style={[styles.paidBadge, { backgroundColor: colors.textMuted }]}>
+            <Text style={styles.paidBadgeText}>COMING SOON</Text>
           </View>
+        ) : (
+          video.isPaid && (
+            <View style={styles.paidBadge}>
+              <Text style={styles.paidBadgeText}>PAID</Text>
+            </View>
+          )
         )}
       </View>
 
@@ -68,6 +75,9 @@ const styles = StyleSheet.create({
   card: {
     flexDirection: "row",
     gap: 12,
+  },
+  cardComingSoon: {
+    opacity: 0.75,
   },
   thumbWrap: {
     width: 148,

@@ -24,6 +24,7 @@ export type TradePost = {
   photos: string[];
   status: TradePostStatus;
   createdAt: string;
+  comingSoon?: boolean;
 };
 
 export type CreateTradePostInput = {

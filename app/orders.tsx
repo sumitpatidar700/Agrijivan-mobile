@@ -13,9 +13,8 @@ import {
 import { Ionicons } from "@expo/vector-icons";
 import { useRouter, useLocalSearchParams } from "expo-router";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { useAuth } from "@/lib/auth-context";
+import { apiGet } from "@/lib/api-client";
 import { colors, radius, shadow } from "@/lib/theme";
 
 type OrderItem = {
@@ -24,14 +23,48 @@ type OrderItem = {
   quantity: number;
 };
 
+type OrderStatus =
+  | "pending"
+  | "processing"
+  | "confirmed"
+  | "shipped"
+  | "out_for_delivery"
+  | "delivered"
+  | "cancelled"
+  | "returned"
+  | "refunded";
+
 type Order = {
   id: string;
+  orderNumber: string;
   date: string;
   items: OrderItem[];
   total: number;
-  status: "Processing" | "Shipped" | "Delivered";
+  status: OrderStatus;
+  paymentMethod: "cod" | "razorpay";
+  razorpayPaymentId?: string;
   deliveryAddress?: string;
 };
+
+const STATUS_META: Record<OrderStatus, { label: string; color: string; bg: string; stepIndex: number }> = {
+  pending: { label: "Pending", color: "#e65100", bg: "#fff3e0", stepIndex: 1 },
+  processing: { label: "Processing", color: "#e65100", bg: "#fff3e0", stepIndex: 1 },
+  confirmed: { label: "Confirmed", color: "#1976d2", bg: "#e3f2fd", stepIndex: 2 },
+  shipped: { label: "Shipped", color: "#1976d2", bg: "#e3f2fd", stepIndex: 2 },
+  out_for_delivery: { label: "Out for Delivery", color: "#6a1b9a", bg: "#f3e5f5", stepIndex: 3 },
+  delivered: { label: "Delivered", color: "#2e7d32", bg: "#e8f5e9", stepIndex: 3 },
+  cancelled: { label: "Cancelled", color: "#c62828", bg: "#ffebee", stepIndex: 0 },
+  returned: { label: "Returned", color: "#c62828", bg: "#ffebee", stepIndex: 0 },
+  refunded: { label: "Refunded", color: "#616161", bg: "#f5f5f5", stepIndex: 0 },
+};
+
+const FILTERS: { value: OrderStatus | "All"; label: string }[] = [
+  { value: "All", label: "All" },
+  { value: "processing", label: "Pending" },
+  { value: "shipped", label: "Shipped" },
+  { value: "delivered", label: "Delivered" },
+  { value: "cancelled", label: "Cancelled" },
+];
 
 export default function MyOrdersScreen() {
   const router = useRouter();
@@ -55,12 +88,12 @@ export default function MyOrdersScreen() {
   // just placed once the list has loaded.
   useEffect(() => {
     if (!openOrderId || orders.length === 0) return;
-    const match = orders.find((o) => o.id === openOrderId);
+    const match = orders.find((o) => o.orderNumber === openOrderId);
     if (match) handleViewDetails(match);
   }, [openOrderId, orders]);
 
   const [searchQuery, setSearchQuery] = useState("");
-  const [activeFilter, setActiveFilter] = useState<"All" | "Processing" | "Shipped" | "Delivered">("All");
+  const [activeFilter, setActiveFilter] = useState<OrderStatus | "All">("All");
 
   const filteredOrders = orders.filter((order) => {
     // 1. Filter by status
@@ -74,7 +107,7 @@ export default function MyOrdersScreen() {
     }
 
     const query = searchQuery.toLowerCase();
-    const orderIdMatches = order.id.toLowerCase().includes(query);
+    const orderIdMatches = order.orderNumber.toLowerCase().includes(query);
     const dateMatches = formatDate(order.date).toLowerCase().includes(query);
     const itemsMatch = order.items.some((item) => item.title.toLowerCase().includes(query));
 
@@ -83,6 +116,7 @@ export default function MyOrdersScreen() {
 
   useEffect(() => {
     fetchOrders();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [user]);
 
   const fetchOrders = async () => {
@@ -92,80 +126,51 @@ export default function MyOrdersScreen() {
     }
 
     setLoading(true);
-    let allOrders: Order[] = [];
-    const supabase = getSupabaseClient();
-    const userKey = user.email || user.phone || "guest";
-
-    // 1. Fetch remote orders from Supabase
-    if (supabase && user.email) {
-      try {
-        const { data, error } = await (supabase.from("orders") as any)
-          .select("*")
-          .eq("customer_email", user.email);
-
-        if (!error && data) {
-          const mappedOrders = data.map((ord: any) => ({
-            id: ord.id,
-            date: ord.created_at || ord.date || new Date().toISOString(),
-            items: typeof ord.items === "string" ? JSON.parse(ord.items) : ord.items,
-            total: ord.total,
-            status: ord.status || "Processing",
-            deliveryAddress: ord.delivery_address || undefined,
-          }));
-          allOrders = [...mappedOrders];
-        }
-      } catch (err) {
-        console.warn("Failed to fetch Supabase orders, using local storage:", err);
-      }
-    }
-
-    // 2. Fetch local storage orders
     try {
-      const localOrdersStr = await AsyncStorage.getItem(`agrijivan-orders-${userKey}`);
-      if (localOrdersStr) {
-        const localOrders = JSON.parse(localOrdersStr);
-        // Deduplicate locally registered orders by ID
-        localOrders.forEach((localOrd: Order) => {
-          if (!allOrders.some((o) => o.id === localOrd.id)) {
-            allOrders.push(localOrd);
-          }
-        });
-      }
-    } catch (err) {
-      console.warn("Failed to fetch local AsyncStorage orders:", err);
-    }
+      const data = await apiGet<any[]>(`/orders?userId=${encodeURIComponent(user.id)}`);
+      const mapped: Order[] = (Array.isArray(data) ? data : []).map((ord: any) => {
+        const items: OrderItem[] = Array.isArray(ord.order_items)
+          ? ord.order_items.map((it: any) => ({
+              title: it.product_name,
+              price: Number(it.unit_price) || 0,
+              quantity: it.quantity,
+            }))
+          : [];
+        const addr = Array.isArray(ord.order_addresses) ? ord.order_addresses[0] : null;
+        const deliveryAddress = addr
+          ? [addr.name, addr.address_line1, addr.city, `${addr.state} - ${addr.pincode}`].filter(Boolean).join(", ")
+          : ord.delivery_address
+          ? [ord.delivery_name, ord.delivery_address, ord.delivery_city, `${ord.delivery_state} - ${ord.delivery_pincode}`]
+              .filter(Boolean)
+              .join(", ")
+          : undefined;
 
-    // Sort orders by date descending
-    allOrders.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-    setOrders(allOrders);
-    setLoading(false);
+        return {
+          id: ord.id,
+          orderNumber: ord.order_number || ord.id,
+          date: ord.created_at || new Date().toISOString(),
+          items,
+          total: Number(ord.total_amount) || 0,
+          status: (ord.status as OrderStatus) || "processing",
+          paymentMethod: ord.payment_method === "razorpay" ? "razorpay" : "cod",
+          razorpayPaymentId: ord.razorpay_payment_id || undefined,
+          deliveryAddress,
+        };
+      });
+
+      mapped.sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+      setOrders(mapped);
+    } catch (err) {
+      console.warn("Failed to fetch orders:", err);
+      setOrders([]);
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleTrackOrder = (order: Order) => {
     setSelectedOrder(order);
     setShowTrackerModal(true);
-  };
-
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case "Delivered":
-        return "#2e7d32"; // Dark Green
-      case "Shipped":
-        return "#1976d2"; // Blue
-      default:
-        return "#e65100"; // Deep Orange (Processing)
-    }
-  };
-
-  const getStatusBgColor = (status: string) => {
-    switch (status) {
-      case "Delivered":
-        return "#e8f5e9"; // Light Green
-      case "Shipped":
-        return "#e3f2fd"; // Light Blue
-      default:
-        return "#fff3e0"; // Light Orange
-    }
   };
 
   const formatDate = (isoString: string) => {
@@ -259,22 +264,22 @@ export default function MyOrdersScreen() {
           </View>
 
           <View style={styles.filterContainer}>
-            {(["All", "Processing", "Shipped", "Delivered"] as const).map((filter) => (
+            {FILTERS.map((filter) => (
               <Pressable
-                key={filter}
+                key={filter.value}
                 style={[
                   styles.filterTab,
-                  activeFilter === filter && styles.filterTabActive,
+                  activeFilter === filter.value && styles.filterTabActive,
                 ]}
-                onPress={() => setActiveFilter(filter)}
+                onPress={() => setActiveFilter(filter.value)}
               >
                 <Text
                   style={[
                     styles.filterTabText,
-                    activeFilter === filter && styles.filterTabTextActive,
+                    activeFilter === filter.value && styles.filterTabTextActive,
                   ]}
                 >
-                  {filter === "Processing" ? "Pending" : filter}
+                  {filter.label}
                 </Text>
               </Pressable>
             ))}
@@ -287,8 +292,8 @@ export default function MyOrdersScreen() {
               <Text style={styles.emptySubtitle}>
                 Try adjusting your search query or status filter.
               </Text>
-              <Pressable 
-                style={styles.actionBtn} 
+              <Pressable
+                style={styles.actionBtn}
                 onPress={() => {
                   setSearchQuery("");
                   setActiveFilter("All");
@@ -299,21 +304,23 @@ export default function MyOrdersScreen() {
             </View>
           ) : (
             <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-              {filteredOrders.map((order) => (
+              {filteredOrders.map((order) => {
+                const meta = STATUS_META[order.status];
+                return (
                 <View key={order.id} style={styles.orderCard}>
                   <View style={styles.cardHeader}>
                 <View>
-                  <Text style={styles.orderId}>{order.id}</Text>
+                  <Text style={styles.orderId}>{order.orderNumber}</Text>
                   <Text style={styles.orderDate}>{formatDate(order.date)}</Text>
                 </View>
                 <View
                   style={[
                     styles.statusBadge,
-                    { backgroundColor: getStatusBgColor(order.status) },
+                    { backgroundColor: meta.bg },
                   ]}
                 >
-                  <Text style={[styles.statusText, { color: getStatusColor(order.status) }]}>
-                    {order.status}
+                  <Text style={[styles.statusText, { color: meta.color }]}>
+                    {meta.label}
                   </Text>
                 </View>
               </View>
@@ -353,7 +360,8 @@ export default function MyOrdersScreen() {
                 </View>
               </View>
             </View>
-          ))}
+                );
+              })}
         </ScrollView>
       )}
       </>
@@ -361,7 +369,9 @@ export default function MyOrdersScreen() {
       </View>
 
       {/* Tracker Timeline Modal */}
-      {selectedOrder && (
+      {selectedOrder && (() => {
+        const meta = STATUS_META[selectedOrder.status];
+        return (
         <Modal
           visible={showTrackerModal}
           transparent={true}
@@ -378,11 +388,17 @@ export default function MyOrdersScreen() {
               </View>
 
               <View style={styles.trackerInfo}>
-                <Text style={styles.trackerId}>{selectedOrder.id}</Text>
+                <Text style={styles.trackerId}>{selectedOrder.orderNumber}</Text>
                 <Text style={styles.trackerDate}>Ordered on {formatDate(selectedOrder.date)}</Text>
               </View>
 
-              {/* Step Timeline tracker */}
+              {meta.stepIndex === 0 ? (
+                <View style={[styles.terminalBanner, { backgroundColor: meta.bg }]}>
+                  <Text style={[styles.terminalBannerText, { color: meta.color }]}>
+                    This order was {meta.label.toLowerCase()}.
+                  </Text>
+                </View>
+              ) : (
               <View style={styles.timelineContainer}>
                 {/* Step 1 */}
                 <View style={styles.timelineRow}>
@@ -404,17 +420,17 @@ export default function MyOrdersScreen() {
                     <View
                       style={[
                         styles.stepCircle,
-                        selectedOrder.status !== "Processing" && styles.stepCircleActive,
+                        meta.stepIndex >= 2 && styles.stepCircleActive,
                       ]}
                     >
-                      {selectedOrder.status !== "Processing" && (
+                      {meta.stepIndex >= 2 && (
                         <Ionicons name="checkmark" size={14} color={colors.surface} />
                       )}
                     </View>
                     <View
                       style={[
                         styles.stepLine,
-                        selectedOrder.status === "Delivered" && styles.stepLineActive,
+                        meta.stepIndex >= 3 && styles.stepLineActive,
                       ]}
                     />
                   </View>
@@ -422,7 +438,7 @@ export default function MyOrdersScreen() {
                     <Text
                       style={[
                         styles.stepTitle,
-                        selectedOrder.status !== "Processing" && styles.stepTitleActive,
+                        meta.stepIndex >= 2 && styles.stepTitleActive,
                       ]}
                     >
                       Shipped
@@ -437,10 +453,10 @@ export default function MyOrdersScreen() {
                     <View
                       style={[
                         styles.stepCircle,
-                        selectedOrder.status === "Delivered" && styles.stepCircleActive,
+                        meta.stepIndex >= 3 && styles.stepCircleActive,
                       ]}
                     >
-                      {selectedOrder.status === "Delivered" && (
+                      {meta.stepIndex >= 3 && (
                         <Ionicons name="checkmark" size={14} color={colors.surface} />
                       )}
                     </View>
@@ -449,7 +465,7 @@ export default function MyOrdersScreen() {
                     <Text
                       style={[
                         styles.stepTitle,
-                        selectedOrder.status === "Delivered" && styles.stepTitleActive,
+                        meta.stepIndex >= 3 && styles.stepTitleActive,
                       ]}
                     >
                       Delivered
@@ -458,6 +474,7 @@ export default function MyOrdersScreen() {
                   </View>
                 </View>
               </View>
+              )}
 
               <Pressable style={styles.doneBtn} onPress={() => setShowTrackerModal(false)}>
                 <Text style={styles.doneBtnText}>Close Tracker</Text>
@@ -465,10 +482,13 @@ export default function MyOrdersScreen() {
             </View>
           </View>
         </Modal>
-      )}
+        );
+      })()}
 
       {/* Detailed Order Summary Modal */}
-      {selectedDetailsOrder && (
+      {selectedDetailsOrder && (() => {
+        const meta = STATUS_META[selectedDetailsOrder.status];
+        return (
         <Modal
           visible={showDetailsModal}
           transparent={true}
@@ -487,7 +507,7 @@ export default function MyOrdersScreen() {
               <ScrollView showsVerticalScrollIndicator={false}>
                 <View style={styles.detailsHeader}>
                   <View>
-                    <Text style={styles.detailsOrderId}>{selectedDetailsOrder.id}</Text>
+                    <Text style={styles.detailsOrderId}>{selectedDetailsOrder.orderNumber}</Text>
                     <Text style={styles.detailsOrderDate}>
                       Placed on: {formatDate(selectedDetailsOrder.date)}
                     </Text>
@@ -495,11 +515,11 @@ export default function MyOrdersScreen() {
                   <View
                     style={[
                       styles.statusBadge,
-                      { backgroundColor: getStatusBgColor(selectedDetailsOrder.status) },
+                      { backgroundColor: meta.bg },
                     ]}
                   >
-                    <Text style={[styles.statusText, { color: getStatusColor(selectedDetailsOrder.status) }]}>
-                      {selectedDetailsOrder.status}
+                    <Text style={[styles.statusText, { color: meta.color }]}>
+                      {meta.label}
                     </Text>
                   </View>
                 </View>
@@ -528,12 +548,6 @@ export default function MyOrdersScreen() {
                     <Text style={styles.paymentVal}>₹{selectedDetailsOrder.total}</Text>
                   </View>
                   <View style={styles.paymentRow}>
-                    <Text style={styles.paymentLabel}>GST Tax (18% inclusive)</Text>
-                    <Text style={styles.paymentVal}>
-                      ₹{Math.round(selectedDetailsOrder.total * 0.18)}
-                    </Text>
-                  </View>
-                  <View style={styles.paymentRow}>
                     <Text style={styles.paymentLabel}>Delivery Charge</Text>
                     <Text style={[styles.paymentVal, { color: colors.primary }]}>Free</Text>
                   </View>
@@ -549,8 +563,16 @@ export default function MyOrdersScreen() {
                   <Text style={styles.sectionTitle}>Delivery & Payment Details</Text>
                   <View style={styles.metaRow}>
                     <Ionicons name="card-outline" size={16} color={colors.textMuted} />
-                    <Text style={styles.metaText}>Payment Method: Cash on Delivery (COD)</Text>
+                    <Text style={styles.metaText}>
+                      Payment Method: {selectedDetailsOrder.paymentMethod === "razorpay" ? "Online (Razorpay)" : "Cash on Delivery (COD)"}
+                    </Text>
                   </View>
+                  {selectedDetailsOrder.razorpayPaymentId && (
+                    <View style={styles.metaRow}>
+                      <Ionicons name="receipt-outline" size={16} color={colors.textMuted} />
+                      <Text style={styles.metaText}>Payment ID: {selectedDetailsOrder.razorpayPaymentId}</Text>
+                    </View>
+                  )}
                   <View style={styles.metaRow}>
                     <Ionicons name="location-outline" size={16} color={colors.textMuted} />
                     <Text style={styles.metaText}>
@@ -566,7 +588,8 @@ export default function MyOrdersScreen() {
             </View>
           </View>
         </Modal>
-      )}
+        );
+      })()}
     </View>
   );
 }
@@ -796,6 +819,15 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: colors.textMuted,
     marginTop: 2,
+  },
+  terminalBanner: {
+    borderRadius: radius.md,
+    padding: 14,
+    marginBottom: 24,
+  },
+  terminalBannerText: {
+    fontSize: 13,
+    fontWeight: "700",
   },
   timelineContainer: {
     paddingLeft: 10,

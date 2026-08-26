@@ -1,4 +1,4 @@
-import { Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
+import { Alert, Image, Linking, Pressable, StyleSheet, Text, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
 
 import { colors, radius, shadow } from "@/lib/theme";
@@ -31,17 +31,29 @@ export function PostCard({ post }: PostCardProps) {
   const location = [post.village, post.district, post.state].filter(Boolean).join(", ") || "Location not set";
 
   const digitsOnly = post.contactNumber.replace(/[^0-9]/g, "");
-  const handleCall = () => digitsOnly && Linking.openURL(`tel:${digitsOnly}`).catch(() => {});
-  const handleWhatsApp = () => digitsOnly && Linking.openURL(`https://wa.me/91${digitsOnly}`).catch(() => {});
+  const handleCall = () => {
+    if (post.comingSoon) {
+      Alert.alert("Coming Soon", "Listings for this farming type aren't live yet - check back soon!");
+      return;
+    }
+    if (digitsOnly) Linking.openURL(`tel:${digitsOnly}`).catch(() => {});
+  };
+  const handleWhatsApp = () => {
+    if (post.comingSoon) {
+      Alert.alert("Coming Soon", "Listings for this farming type aren't live yet - check back soon!");
+      return;
+    }
+    if (digitsOnly) Linking.openURL(`https://wa.me/91${digitsOnly}`).catch(() => {});
+  };
 
   return (
-    <View style={styles.card}>
+    <View style={[styles.card, post.comingSoon && styles.cardComingSoon]}>
       <View style={styles.topRow}>
         <View style={styles.imageWrap}>
           <Image source={{ uri: post.photos[0] || FALLBACK_PHOTO }} style={styles.image} resizeMode="cover" />
-          <View style={[styles.badge, { backgroundColor: isBuy ? colors.primary : "#e07b00" }]}>
+          <View style={[styles.badge, { backgroundColor: post.comingSoon ? colors.textMuted : isBuy ? colors.primary : "#e07b00" }]}>
             <Ionicons name={isBuy ? "cart" : "pricetag"} size={11} color="#fff" />
-            <Text style={styles.badgeText}>{isBuy ? "BUY" : "SELL"}</Text>
+            <Text style={styles.badgeText}>{post.comingSoon ? "COMING SOON" : isBuy ? "BUY" : "SELL"}</Text>
           </View>
           <View style={styles.timeBadge}>
             <Text style={styles.timeBadgeText}>{formatPostedAt(post.createdAt)}</Text>
@@ -122,6 +134,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     padding: 12,
     ...shadow,
+  },
+  cardComingSoon: {
+    opacity: 0.75,
   },
   topRow: {
     flexDirection: "row",

@@ -30,6 +30,7 @@ import { useLanguage } from "@/lib/language-context";
 import { useActiveFarming } from "@/lib/active-farming-context";
 import { t } from "@/lib/home-translations";
 import type { Product } from "@/lib/agri-data";
+import { DUMMY_BOOKS, DUMMY_EQUIPMENT, DUMMY_MEDICINE, DUMMY_FEED } from "@/lib/coming-soon-data";
 
 
 // ─── Home Screen ──────────────────────────────────────────────────────────────
@@ -106,12 +107,14 @@ export default function HomeScreen() {
         .map((p) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=300&q=80"))
     : [];
 
-  const displayBooks = activeBooks;
-  const displayEquipment = activeEquipment;
+  // No real products for this farming type yet -> show clearly-labeled "Coming
+  // Soon" placeholders instead of hiding the section entirely.
+  const displayBooks = activeBooks.length > 0 ? activeBooks : DUMMY_BOOKS;
+  const displayEquipment = activeEquipment.length > 0 ? activeEquipment : DUMMY_EQUIPMENT;
   const booksTitleOverride = activeFarming ? `${activeFarming.name} Books` : undefined;
   const equipmentTitleOverride = activeFarming ? `${activeFarming.name} Equipment` : undefined;
 
-  // ── Medicine / Feed Supplements: DB-only (no demo fallback), gated by Category Hub ──
+  // ── Medicine / Feed Supplements: gated by Category Hub, dummy fallback otherwise ──
   const hubMatchedCategoryKey = matchHubCategoryKey(activeFarming?.categorySlug);
   const { data: hubCategories } = useHubCategoriesQuery();
   const matchedHubCategory = hubCategories?.find((c) => c.key === hubMatchedCategoryKey) ?? null;
@@ -122,19 +125,22 @@ export default function HomeScreen() {
     return hubSections.find((s) => s.key === hubKey)?.enabled ?? false;
   };
 
-  const displayMedicine = dbProducts
+  const activeMedicine = dbProducts
     ? dbProducts
         .filter((p) => p.section === "medicine" && (!activeFarming || (p.item_ids || []).includes(activeFarming.id)))
         .slice(0, 4)
         .map((p) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1584308666744-24d5c474f2ae?w=300&q=80"))
     : [];
 
-  const displayFeed = dbProducts
+  const activeFeed = dbProducts
     ? dbProducts
         .filter((p) => p.section === "feed" && (!activeFarming || (p.item_ids || []).includes(activeFarming.id)))
         .slice(0, 4)
-        .map((p) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1595855759920-86582396756c?w=300&q=80"))
+        .map((p) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1574943320219-553eb213f72d?w=300&q=80"))
     : [];
+
+  const displayMedicine = activeMedicine.length > 0 ? activeMedicine : DUMMY_MEDICINE;
+  const displayFeed = activeFeed.length > 0 ? activeFeed : DUMMY_FEED;
 
   const medicineTitleOverride = activeFarming ? `${activeFarming.name} Medicine` : undefined;
   const feedTitleOverride = activeFarming ? `${activeFarming.name} Feed Supplements` : undefined;
@@ -143,10 +149,13 @@ export default function HomeScreen() {
   // render skeletons rather than placeholder products, so nothing fake is ever shown.
   const sectionsLoading = productsLoading || farmingLoading;
 
-  const showBooks = isHubSectionVisible("books") && displayBooks.length > 0;
-  const showEquipment = isHubSectionVisible("equipment") && displayEquipment.length > 0;
-  const showMedicine = isHubSectionVisible("medicine") && displayMedicine.length > 0;
-  const showFeed = isHubSectionVisible("feed_supplements") && displayFeed.length > 0;
+  // The Category Hub visibility toggle only hides a section when there's REAL
+  // data being hidden by it - a "Coming Soon" placeholder should always show,
+  // regardless of that per-category admin toggle.
+  const showBooks = activeBooks.length > 0 ? isHubSectionVisible("books") : true;
+  const showEquipment = activeEquipment.length > 0 ? isHubSectionVisible("equipment") : true;
+  const showMedicine = activeMedicine.length > 0 ? isHubSectionVisible("medicine") : true;
+  const showFeed = activeFeed.length > 0 ? isHubSectionVisible("feed_supplements") : true;
 
   return (
     <View style={styles.screen}>

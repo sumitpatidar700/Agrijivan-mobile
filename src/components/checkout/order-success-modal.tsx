@@ -9,7 +9,7 @@ export type CompletedOrder = {
   id: string;
   itemCount: number;
   total: number;
-  paymentMethod: "cod" | "online";
+  paymentMethod: "cod" | "razorpay";
 };
 
 type OrderSuccessModalProps = {
@@ -124,7 +124,7 @@ export function OrderSuccessModal({ visible, order, onViewDetails, onContinueSho
           <Animated.View style={[styles.body, { opacity: contentOpacity, transform: [{ translateY: contentTranslate }] }]}>
             <Text style={styles.title}>Order Placed!</Text>
             <Text style={styles.subtitle}>
-              {order.paymentMethod === "online"
+              {order.paymentMethod === "razorpay"
                 ? "Payment received - your order is confirmed."
                 : "Your order is confirmed for Cash on Delivery."}
             </Text>

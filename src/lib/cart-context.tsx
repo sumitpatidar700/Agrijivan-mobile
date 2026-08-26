@@ -84,11 +84,14 @@ export function CartProvider({ children }: { children: ReactNode }) {
       await AsyncStorage.setItem(`agrijivan-cart-${userKey}`, JSON.stringify(updated));
       const supabase = getSupabaseClient();
       if (supabase && user) {
-        const { error } = await (supabase.from("cart_items") as any).upsert({
-          user_id: user.id,
-          items: JSON.stringify(updated),
-          updated_at: new Date().toISOString(),
-        });
+        const { error } = await (supabase.from("cart_items") as any).upsert(
+          {
+            user_id: user.id,
+            items: JSON.stringify(updated),
+            updated_at: new Date().toISOString(),
+          },
+          { onConflict: "user_id" }
+        );
         if (error) {
           console.warn("Failed to sync cart to Supabase:", error.message);
         }

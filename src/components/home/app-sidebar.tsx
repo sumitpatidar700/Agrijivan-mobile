@@ -32,7 +32,6 @@ const menuItems: SidebarItem[] = [
   { title: "My Orders", icon: "bag-outline", route: "/orders" },
   { title: "Shopping Cart", icon: "cart-outline", route: "/cart" },
   { title: "Addresses", icon: "location-outline", route: "/addresses" },
-  { title: "Change Language", icon: "globe-outline", route: "/preferences" },
   { title: "Help & Support", icon: "help-circle-outline", route: "/support" },
 ];
 

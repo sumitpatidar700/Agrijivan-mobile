@@ -1,6 +1,7 @@
 import React from "react";
 import { Ionicons } from "@expo/vector-icons";
 import {
+  Alert,
   Image,
   Pressable,
   ScrollView,
@@ -24,6 +25,7 @@ export type HomeProduct = {
   price: number;
   originalPrice: number;
   badgeKey?: string;
+  comingSoon?: boolean;
 };
 
 const badgeColors: Record<string, string> = {
@@ -91,12 +93,14 @@ export function ProductSection({
             : undefined;
 
           return (
-            <View key={product.id} style={styles.card}>
+            <View key={product.id} style={[styles.card, product.comingSoon && styles.cardComingSoon]}>
               {/* Pressable to go to Details */}
               <Pressable
                 style={{ flex: 1, flexDirection: "column" }}
                 onPress={() =>
-                  router.push({ pathname: "/product-details", params: { id: product.id } })
+                  product.comingSoon
+                    ? Alert.alert("Coming Soon", "This item isn't available yet - check back soon!")
+                    : router.push({ pathname: "/product-details", params: { id: product.id } })
                 }
               >
                 {/* Image */}
@@ -106,12 +110,18 @@ export function ProductSection({
                     style={styles.productImage}
                     resizeMode="cover"
                   />
-                  {product.badgeKey && (
-                    <View style={[styles.badge, { backgroundColor: badgeColor }]}>
-                      <Text style={styles.badgeText}>
-                        {t(locale, product.badgeKey)}
-                      </Text>
+                  {product.comingSoon ? (
+                    <View style={[styles.badge, { backgroundColor: colors.textMuted }]}>
+                      <Text style={styles.badgeText}>COMING SOON</Text>
                     </View>
+                  ) : (
+                    product.badgeKey && (
+                      <View style={[styles.badge, { backgroundColor: badgeColor }]}>
+                        <Text style={styles.badgeText}>
+                          {t(locale, product.badgeKey)}
+                        </Text>
+                      </View>
+                    )
                   )}
                 </View>
 
@@ -121,38 +131,50 @@ export function ProductSection({
                     {product.name || (product.nameKey ? t(locale, product.nameKey as any) : "")}
                   </Text>
 
-                  {/* Stars */}
-                  <View style={styles.ratingRow}>
-                    <Ionicons name="star" size={12} color={colors.warning} />
-                    <Text style={styles.ratingText}>{product.rating.toFixed(1)}</Text>
-                    <Text style={styles.reviewText}>({product.reviewCount})</Text>
-                  </View>
+                  {!product.comingSoon && (
+                    <>
+                      {/* Stars */}
+                      <View style={styles.ratingRow}>
+                        <Ionicons name="star" size={12} color={colors.warning} />
+                        <Text style={styles.ratingText}>{product.rating.toFixed(1)}</Text>
+                        <Text style={styles.reviewText}>({product.reviewCount})</Text>
+                      </View>
 
-                  {/* Price */}
-                  <View style={styles.priceRow}>
-                    <Text style={styles.price}>₹{product.price.toLocaleString()}</Text>
-                    {hasMarkdown && (
-                      <>
-                        <Text style={styles.originalPrice}>
-                          ₹{product.originalPrice.toLocaleString()}
-                        </Text>
-                        <View style={styles.discountBadge}>
-                          <Text style={styles.discountText}>{discountPct}% OFF</Text>
-                        </View>
-                      </>
-                    )}
-                  </View>
+                      {/* Price */}
+                      <View style={styles.priceRow}>
+                        <Text style={styles.price}>₹{product.price.toLocaleString()}</Text>
+                        {hasMarkdown && (
+                          <>
+                            <Text style={styles.originalPrice}>
+                              ₹{product.originalPrice.toLocaleString()}
+                            </Text>
+                            <View style={styles.discountBadge}>
+                              <Text style={styles.discountText}>{discountPct}% OFF</Text>
+                            </View>
+                          </>
+                        )}
+                      </View>
+                    </>
+                  )}
+                  {product.comingSoon && (
+                    <Text style={styles.comingSoonText}>Launching soon for your farming type</Text>
+                  )}
                 </View>
               </Pressable>
 
               {/* Add to Cart */}
               <View style={{ paddingHorizontal: 10, paddingBottom: 10 }}>
                 <Pressable
-                  style={styles.addBtn}
-                  onPress={(e) => onAddToCart?.(product, e.nativeEvent.pageX, e.nativeEvent.pageY)}
+                  style={[styles.addBtn, product.comingSoon && styles.addBtnDisabled]}
+                  onPress={(e) =>
+                    product.comingSoon
+                      ? Alert.alert("Coming Soon", "This item isn't available yet - check back soon!")
+                      : onAddToCart?.(product, e.nativeEvent.pageX, e.nativeEvent.pageY)
+                  }
                 >
-                  <Ionicons name="add" size={14} color={colors.primary} />
-                  <Text style={styles.addBtnText}>{t(locale, "addToCart")}</Text>
+                  <Text style={[styles.addBtnText, product.comingSoon && { color: colors.textMuted }]}>
+                    {product.comingSoon ? "Notify Me" : t(locale, "addToCart")}
+                  </Text>
                 </Pressable>
               </View>
             </View>
@@ -222,6 +244,9 @@ const styles = StyleSheet.create({
     borderColor: colors.border,
     ...shadow,
   },
+  cardComingSoon: {
+    opacity: 0.75,
+  },
   imageWrap: {
     height: 130,
     backgroundColor: "#f4f6f4",
@@ -290,4 +315,11 @@ const styles = StyleSheet.create({
     gap: 2,
   },
   addBtnText: { fontSize: 11, fontWeight: "700", color: colors.primary },
+  addBtnDisabled: { borderColor: colors.textMuted },
+  comingSoonText: {
+    fontSize: 10.5,
+    color: colors.textMuted,
+    fontWeight: "600",
+    marginTop: 2,
+  },
 });

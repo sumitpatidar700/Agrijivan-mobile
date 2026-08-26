@@ -13,10 +13,9 @@ import {
   TouchableWithoutFeedback,
 } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-import { OTPWidget } from "@msg91comm/sendotp-react-native";
 
 import AsyncStorage from "@react-native-async-storage/async-storage";
-import { apiGet, apiPost } from "@/lib/api-client";
+import { apiGet } from "@/lib/api-client";
 import { getSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, shadow } from "@/lib/theme";
 import { useAuth } from "@/lib/auth-context";
@@ -26,10 +25,6 @@ type LoginFormProps = {
   onSuccess?: () => void;
   isEmbedded?: boolean;
 };
-
-const MSG91_WIDGET_ID = process.env.EXPO_PUBLIC_MSG91_WIDGET_ID || "";
-const MSG91_TOKEN_AUTH = process.env.EXPO_PUBLIC_MSG91_TOKEN_AUTH || "";
-const MSG91_CONFIGURED = Boolean(MSG91_WIDGET_ID && MSG91_TOKEN_AUTH);
 
 export function LoginForm({ onSuccess, isEmbedded = false }: LoginFormProps) {
   const { loginSimulated } = useAuth();
@@ -65,18 +60,10 @@ export function LoginForm({ onSuccess, isEmbedded = false }: LoginFormProps) {
   const otpRefs = React.useRef<(TextInput | null)[]>([]);
   const [otpSent, setOtpSent] = useState(false);
   const [otpLoading, setOtpLoading] = useState(false);
-  const [isMockOtp, setIsMockOtp] = useState(false);
-  const [otpReqId, setOtpReqId] = useState<string | null>(null);
 
   const [signInWithMobile, setSignInWithMobile] = useState(true);
 
   const supabase = getSupabaseClient();
-
-  useEffect(() => {
-    if (MSG91_CONFIGURED) {
-      OTPWidget.initializeWidget(MSG91_WIDGET_ID, MSG91_TOKEN_AUTH);
-    }
-  }, []);
 
   const fetchProfileByPhone = async (phone: string) => {
     return apiGet<any>(`/content/profiles/phone/${encodeURIComponent(phone)}`).catch(() => null);
@@ -165,35 +152,25 @@ export function LoginForm({ onSuccess, isEmbedded = false }: LoginFormProps) {
         }
       }
 
-      if (!MSG91_CONFIGURED) {
-        setIsMockOtp(true);
-        setOtpReqId(null);
-        alert(`Sandbox Mode: OTP code sent to ${formattedMobile}! (For demo, use code: 123456)`);
-        setOtpSent(true);
+      if (!supabase) {
+        setErrorMsg("Database is not configured.");
         setOtpLoading(false);
         return;
       }
 
-      const identifier = formattedMobile.replace(/^\+/, "");
-      const sendResult: any = await OTPWidget.sendOTP({ identifier });
-      console.log("[MSG91] sendOTP response:", JSON.stringify(sendResult));
+      const { error } = await supabase.auth.signInWithOtp({
+        phone: formattedMobile,
+        options: isSignUp
+          ? { shouldCreateUser: true, data: { name, phone: formattedMobile, role: "customer" } }
+          : { shouldCreateUser: false },
+      });
 
-      if (sendResult?.type !== "success") {
-        setErrorMsg(sendResult?.message || "Failed to send OTP.");
+      if (error) {
+        setErrorMsg(error.message || "Failed to send OTP.");
         setOtpLoading(false);
         return;
       }
 
-      // MSG91's own SDK docs don't document the exact success-response field
-      // names, so this checks the common candidates - the console.log above
-      // shows the real shape if none of these match.
-      const reqId = sendResult.message || sendResult.reqId || sendResult.request_id || sendResult.data?.reqId;
-      if (!reqId) {
-        console.warn("[MSG91] sendOTP succeeded but no reqId field was found in the response - check the logged shape above.");
-      }
-
-      setOtpReqId(reqId ?? null);
-      setIsMockOtp(false);
       alert(`OTP code sent successfully to ${formattedMobile}!`);
       setOtpSent(true);
     } catch (err: any) {
@@ -226,135 +203,24 @@ export function LoginForm({ onSuccess, isEmbedded = false }: LoginFormProps) {
       if (isSignUp || (signInWithMobile && otpSent)) {
         const formattedMobile = mobile.startsWith("+") ? mobile : `+91${mobile}`;
 
-        let otpValid = false;
-        if (isMockOtp) {
-          otpValid = otp === "123456" || otp === "1234";
-        } else if (otpReqId) {
-          const verifyResult: any = await OTPWidget.verifyOTP({ reqId: otpReqId, otp });
-          console.log("[MSG91] verifyOTP response:", JSON.stringify(verifyResult));
+        const { error: verifyError } = await supabase.auth.verifyOtp({
+          phone: formattedMobile,
+          token: otp,
+          type: "sms",
+        });
 
-          if (verifyResult?.type === "success") {
-            // Same caveat as sendOTP - check the logged shape above if this
-            // access token turns out to be undefined.
-            const accessToken =
-              verifyResult.message || verifyResult.access_token || verifyResult["access-token"] || verifyResult.data?.token;
-            const backendCheck = await apiPost<{ success: boolean; error?: string }>("/sms/verify-access-token", {
-              accessToken,
-            });
-            otpValid = backendCheck.success;
-          }
+        if (verifyError) {
+          console.error("[OTP verify] error:", verifyError);
+          throw new Error(
+            verifyError.message?.toLowerCase().includes("token")
+              ? "Invalid OTP code. Please try again."
+              : verifyError.message || "Invalid OTP code. Please try again."
+          );
         }
 
-        if (!otpValid) {
-          throw new Error("Invalid OTP code. Please try again.");
-        }
-
-        if (isSignUp) {
-          const cleanPhoneDigits = formattedMobile.replace(/[^0-9]/g, "");
-          const resolvedEmail = (email || `${cleanPhoneDigits}@mobile.agrijivan.app`).trim().toLowerCase();
-          const generatedPassword = `AgriJivan_${cleanPhoneDigits}!`;
-
-          try {
-            const localProfilesStr = await AsyncStorage.getItem("local_profiles");
-            const localProfiles = localProfilesStr ? JSON.parse(localProfilesStr) : [];
-            if (!localProfiles.some((p: any) => p.phone === formattedMobile)) {
-              localProfiles.push({ phone: formattedMobile, name, location, email: resolvedEmail });
-              await AsyncStorage.setItem("local_profiles", JSON.stringify(localProfiles));
-            }
-          } catch (err) {
-            console.warn("Local profile save error:", err);
-          }
-
-          try {
-            const existingProfile = await fetchProfileByPhone(formattedMobile);
-            let authUserId = existingProfile?.id as string | undefined;
-            let hasRealSession = false;
-
-            if (!authUserId) {
-              const signUpResult = await supabase.auth.signUp({
-                email: resolvedEmail,
-                password: generatedPassword,
-                options: {
-                  data: {
-                    name: name || "Farmer",
-                    phone: formattedMobile,
-                    role: "customer",
-                  },
-                },
-              });
-
-              if (signUpResult.error) {
-                throw signUpResult.error;
-              }
-
-              authUserId = signUpResult.data.user?.id;
-              hasRealSession = Boolean(signUpResult.data.session);
-            }
-
-            if (!authUserId) {
-              throw new Error("Failed to create auth user for mobile signup.");
-            }
-
-            const savedProfile = await apiPost("/content/profiles", {
-              id: authUserId,
-              phone: formattedMobile,
-              name: name || "Farmer",
-              email: resolvedEmail,
-              role: existingProfile?.role || "customer",
-            });
-
-            if (!hasRealSession) {
-              const { error: signInError } = await supabase.auth.signInWithPassword({
-                email: resolvedEmail,
-                password: generatedPassword,
-              });
-              hasRealSession = !signInError;
-            }
-
-            // A real Supabase session is picked up automatically by the
-            // onAuthStateChange listener in auth-context.tsx. Only fall back to
-            // a simulated session if we genuinely couldn't establish a real one
-            // (e.g. the Supabase project requires email confirmation) -
-            // otherwise loginSimulated would overwrite (and permanently shadow,
-            // on every future app launch) the real session we just got.
-            if (!hasRealSession) {
-              await loginSimulated(
-                savedProfile?.email || resolvedEmail,
-                savedProfile?.phone || formattedMobile,
-                savedProfile?.name || name || "Farmer",
-                location || "AgriJivan Hub",
-                savedProfile?.id || authUserId,
-              );
-            }
-          } catch (err) {
-            console.warn("Mobile signup provisioning failed:", err);
-            throw err;
-          }
-        } else {
-          const existingProfile = await fetchProfileByPhone(formattedMobile);
-          if (!existingProfile?.id) {
-            throw new Error("This mobile number is not registered. Please create an account first!");
-          }
-
-          const cleanPhoneDigits = formattedMobile.replace(/[^0-9]/g, "");
-          const { error: signInError } = await supabase.auth.signInWithPassword({
-            email: existingProfile.email,
-            password: `AgriJivan_${cleanPhoneDigits}!`,
-          });
-
-          // Falls back to a simulated session for accounts created before this
-          // password scheme existed (or via the web app's own password scheme).
-          if (signInError) {
-            await loginSimulated(
-              existingProfile.email || email,
-              existingProfile.phone || formattedMobile,
-              existingProfile.name || name || "Farmer",
-              location || "AgriJivan Hub",
-              existingProfile.id,
-            );
-          }
-        }
-
+        // verifyOtp establishes a real Supabase session directly (creating the
+        // auth.users row + profiles row via the DB trigger for signups) -
+        // auth-context.tsx's onAuthStateChange listener picks it up automatically.
         alert(isSignUp ? "Account created successfully! Welcome to AgriJivan." : "Account verified successfully! Welcome back to AgriJivan.");
         onSuccess?.();
       } else {
@@ -424,8 +290,6 @@ export function LoginForm({ onSuccess, isEmbedded = false }: LoginFormProps) {
   const handleToggleMode = () => {
     setIsSignUp(!isSignUp);
     setOtpSent(false);
-    setIsMockOtp(false);
-    setOtpReqId(null);
     setErrorMsg(null);
     setOtpDigits(["", "", "", "", "", ""]);
     setOtp("");

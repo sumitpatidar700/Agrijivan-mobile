@@ -31,7 +31,7 @@ const primaryMenuItems: MenuItem[] = [
   { title: "User Profile", icon: "person-outline", route: "/edit-profile" },
   { title: "My Orders", icon: "bag-outline", route: "/orders" },
   { title: "My eBooks", icon: "book-outline", route: "/my-ebooks" },
-  { title: "Change Language", icon: "globe-outline", route: "/preferences" },
+  { title: "Change Farming or Language Region", icon: "globe-outline", route: "/preferences" },
   { title: "Rate Us", icon: "star-outline", action: "rate" },
 ];
 

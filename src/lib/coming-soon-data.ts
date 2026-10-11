@@ -29,10 +29,50 @@ function comingSoonProduct(id: string, name: string, image: string): HomeProduct
 }
 
 export const DUMMY_BOOKS: HomeProduct[] = [
-  comingSoonProduct("dummy-book-1", "Complete Farming Guide", PLACEHOLDER_BOOK_IMAGE),
-  comingSoonProduct("dummy-book-2", "Crop Management Handbook", PLACEHOLDER_BOOK_IMAGE),
-  comingSoonProduct("dummy-book-3", "Beginner's Farming Manual", PLACEHOLDER_BOOK_IMAGE),
-  comingSoonProduct("dummy-book-4", "Advanced Techniques eBook", PLACEHOLDER_BOOK_IMAGE),
+  {
+    id: "dummy-book-1",
+    nameKey: "book1",
+    name: "पिग फार्मिंग ट्रेनिंग कोर्स बुक",
+    image: "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=400&q=80",
+    rating: 4.8,
+    reviewCount: 156,
+    price: 899,
+    originalPrice: 1299,
+    badgeKey: "badgeBestseller", // Red bestseller badge
+  },
+  {
+    id: "dummy-book-2",
+    nameKey: "book2",
+    name: "पिग फीड फॉर्मुलेशन बुक",
+    image: "https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=400&q=80",
+    rating: 4.7,
+    reviewCount: 89,
+    price: 649,
+    originalPrice: 899,
+    badgeKey: "badgeFeatured", // Blue featured badge
+  },
+  {
+    id: "dummy-book-3",
+    nameKey: "book3",
+    name: "पिग हेल्थ मैनेजमेंट गाइड",
+    image: "https://images.unsplash.com/photo-1512820790803-83ca734da794?w=400&q=80",
+    rating: 4.9,
+    reviewCount: 234,
+    price: 549,
+    originalPrice: 799,
+    badgeKey: "badgeBestseller", // Red bestseller badge
+  },
+  {
+    id: "dummy-book-4",
+    nameKey: "book4",
+    name: "पिग ब्रीडिंग मास्टरक्लास",
+    image: "https://images.unsplash.com/photo-1497633762265-9d179a990aa6?w=400&q=80",
+    rating: 4.6,
+    reviewCount: 112,
+    price: 749,
+    originalPrice: 999,
+    badgeKey: "badgeFeatured", // Blue featured badge
+  },
 ];
 
 export const DUMMY_EQUIPMENT: HomeProduct[] = [

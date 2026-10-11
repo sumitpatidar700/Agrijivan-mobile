@@ -29,9 +29,9 @@ export type HomeProduct = {
 };
 
 const badgeColors: Record<string, string> = {
-  badgeBestseller: "#e53935",
-  badgeFeatured: "#1565c0",
-  badgeNew: "#2e7d32",
+  badgeBestseller: "#D32F2F", // Vibrant red for bestseller
+  badgeFeatured: "#1976D2",   // Vibrant blue for featured
+  badgeNew: "#2E7D32",        // Clean green for new
 };
 
 type ProductSectionProps = {
@@ -82,21 +82,19 @@ export function ProductSection({
         contentContainerStyle={styles.scrollContent}
       >
         {products.map((product) => {
-          // Only treat it as a markdown when there's a real MRP above the selling
-          // price - otherwise we'd render "₹0" and a nonsense discount.
           const hasMarkdown = product.originalPrice > product.price;
           const discountPct = hasMarkdown
             ? Math.round(((product.originalPrice - product.price) / product.originalPrice) * 100)
             : 0;
           const badgeColor = product.badgeKey
-            ? badgeColors[product.badgeKey] ?? colors.primary
+            ? badgeColors[product.badgeKey] ?? "#D32F2F"
             : undefined;
 
           return (
             <View key={product.id} style={[styles.card, product.comingSoon && styles.cardComingSoon]}>
               {/* Pressable to go to Details */}
               <Pressable
-                style={{ flex: 1, flexDirection: "column" }}
+                style={styles.cardPressable}
                 onPress={() =>
                   product.comingSoon
                     ? Alert.alert("Coming Soon", "This item isn't available yet - check back soon!")
@@ -108,7 +106,7 @@ export function ProductSection({
                   <Image
                     source={{ uri: product.image }}
                     style={styles.productImage}
-                    resizeMode="cover"
+                    resizeMode="contain"
                   />
                   {product.comingSoon ? (
                     <View style={[styles.badge, { backgroundColor: colors.textMuted }]}>
@@ -118,7 +116,7 @@ export function ProductSection({
                     product.badgeKey && (
                       <View style={[styles.badge, { backgroundColor: badgeColor }]}>
                         <Text style={styles.badgeText}>
-                          {t(locale, product.badgeKey)}
+                          {t(locale, product.badgeKey as any)}
                         </Text>
                       </View>
                     )
@@ -135,12 +133,12 @@ export function ProductSection({
                     <>
                       {/* Stars */}
                       <View style={styles.ratingRow}>
-                        <Ionicons name="star" size={12} color={colors.warning} />
-                        <Text style={styles.ratingText}>{product.rating.toFixed(1)}</Text>
-                        <Text style={styles.reviewText}>({product.reviewCount})</Text>
+                        <Ionicons name="star" size={11} color="#FFA000" />
+                        <Text style={styles.ratingText}>{product.rating ? product.rating.toFixed(1) : "4.8"}</Text>
+                        <Text style={styles.reviewText}>({product.reviewCount ?? 156})</Text>
                       </View>
 
-                      {/* Price */}
+                      {/* Price in one single row */}
                       <View style={styles.priceRow}>
                         <Text style={styles.price}>₹{product.price.toLocaleString()}</Text>
                         {hasMarkdown && (
@@ -148,9 +146,7 @@ export function ProductSection({
                             <Text style={styles.originalPrice}>
                               ₹{product.originalPrice.toLocaleString()}
                             </Text>
-                            <View style={styles.discountBadge}>
-                              <Text style={styles.discountText}>{discountPct}% OFF</Text>
-                            </View>
+                            <Text style={styles.discountText}>{discountPct}% OFF</Text>
                           </>
                         )}
                       </View>
@@ -163,7 +159,7 @@ export function ProductSection({
               </Pressable>
 
               {/* Add to Cart */}
-              <View style={{ paddingHorizontal: 10, paddingBottom: 10 }}>
+              <View style={styles.btnWrap}>
                 <Pressable
                   style={[styles.addBtn, product.comingSoon && styles.addBtnDisabled]}
                   onPress={(e) =>
@@ -187,16 +183,16 @@ export function ProductSection({
 
 const styles = StyleSheet.create({
   section: {
-    marginTop: 20,
+    marginTop: 16,
     backgroundColor: "#fff",
-    paddingVertical: 14,
+    paddingVertical: 12,
   },
   header: {
     flexDirection: "row",
     alignItems: "flex-start",
     justifyContent: "space-between",
     paddingHorizontal: 16,
-    marginBottom: 14,
+    marginBottom: 10,
   },
   headerLeft: {
     flexDirection: "row",
@@ -204,76 +200,81 @@ const styles = StyleSheet.create({
     gap: 8,
     flex: 1,
   },
-  headerIcon: { fontSize: 22 },
+  headerIcon: { fontSize: 20 },
   sectionTitle: {
-    fontSize: 15,
+    fontSize: 14.5,
     fontWeight: "800",
     color: colors.text,
   },
   sectionSubtitle: {
-    fontSize: 11,
+    fontSize: 10.5,
     color: colors.textMuted,
-    marginTop: 2,
+    marginTop: 1,
   },
   seeAllBtn: {
     borderWidth: 1,
     borderColor: colors.primary,
-    paddingHorizontal: 12,
-    paddingVertical: 5,
+    paddingHorizontal: 10,
+    paddingVertical: 4,
     borderRadius: radius.sm,
   },
   seeAllText: {
-    fontSize: 12,
+    fontSize: 11,
     color: colors.primary,
     fontWeight: "700",
   },
   scrollContent: {
-    paddingHorizontal: 16,
-    gap: 12,
-    paddingBottom: 4,
+    paddingHorizontal: 14,
+    gap: 10,
+    paddingBottom: 2,
   },
   card: {
     width: 145,
-    height: 275, // Fixed card height!
-    flexDirection: "column",
-    justifyContent: "space-between",
-    backgroundColor: colors.surface,
-    borderRadius: radius.md,
+    backgroundColor: "#fff",
+    borderRadius: 12,
     overflow: "hidden",
     borderWidth: 1,
-    borderColor: colors.border,
+    borderColor: "#E5E7EB",
+    paddingBottom: 8,
     ...shadow,
+    elevation: 2,
   },
   cardComingSoon: {
     opacity: 0.75,
   },
+  cardPressable: {
+    flexDirection: "column",
+  },
   imageWrap: {
-    height: 130,
-    backgroundColor: "#f4f6f4",
+    height: 105, // Compact image container
+    backgroundColor: "#fff",
     position: "relative",
+    alignItems: "center",
+    justifyContent: "center",
+    padding: 4,
   },
   productImage: { width: "100%", height: "100%" },
   badge: {
     position: "absolute",
-    top: 8,
-    left: 8,
+    top: 6,
+    left: 6,
     paddingHorizontal: 6,
-    paddingVertical: 3,
+    paddingVertical: 2,
     borderRadius: 4,
+    zIndex: 2,
   },
-  badgeText: { color: "#fff", fontSize: 9, fontWeight: "800" },
+  badgeText: { color: "#fff", fontSize: 8.5, fontWeight: "800" },
   info: { 
-    padding: 10, 
-    gap: 4,
-    flex: 1, // Stretch info container to take up remaining height
-    justifyContent: "space-between",
+    paddingHorizontal: 8, 
+    paddingTop: 4,
+    paddingBottom: 2,
   },
   productName: {
-    fontSize: 11,
+    fontSize: 11.5,
     fontWeight: "700",
-    color: colors.text,
-    lineHeight: 16,
-    minHeight: 32,
+    color: "#1F2937",
+    lineHeight: 15,
+    height: 30, // 2 lines fixed
   },
   ratingRow: {
     flexDirection: "row",
@@ -281,45 +282,42 @@ const styles = StyleSheet.create({
     gap: 3,
     marginTop: 2,
   },
-  ratingText: { fontSize: 11, fontWeight: "700", color: colors.text },
-  reviewText: { fontSize: 10, color: colors.textMuted },
+  ratingText: { fontSize: 10.5, fontWeight: "700", color: "#374151" },
+  reviewText: { fontSize: 9.5, color: "#9CA3AF" },
   priceRow: {
     flexDirection: "row",
     alignItems: "center",
-    flexWrap: "wrap",
+    flexWrap: "nowrap",
     gap: 4,
-    marginTop: 2,
+    marginTop: 3,
   },
-  price: { fontSize: 13, fontWeight: "800", color: colors.text },
+  price: { fontSize: 13.5, fontWeight: "800", color: "#166534" },
   originalPrice: {
-    fontSize: 10,
-    color: colors.textMuted,
+    fontSize: 10.5,
+    color: "#9CA3AF",
     textDecorationLine: "line-through",
   },
-  discountBadge: {
-    backgroundColor: "#e8f5e9",
-    paddingHorizontal: 4,
-    paddingVertical: 1,
-    borderRadius: 3,
+  discountText: { fontSize: 10.5, fontWeight: "800", color: "#DC2626" },
+  btnWrap: {
+    paddingHorizontal: 8,
+    marginTop: 6,
   },
-  discountText: { fontSize: 9, fontWeight: "800", color: colors.primary },
   addBtn: {
     flexDirection: "row",
     alignItems: "center",
     justifyContent: "center",
     borderWidth: 1.5,
-    borderColor: colors.primary,
-    borderRadius: radius.sm,
-    paddingVertical: 6,
-    marginTop: 6,
-    gap: 2,
+    borderColor: "#2E7D32", // Light green border
+    backgroundColor: "#F7FCF8", // Soft light green background
+    borderRadius: 8,
+    paddingVertical: 5,
   },
-  addBtnText: { fontSize: 11, fontWeight: "700", color: colors.primary },
+  addBtnText: { fontSize: 11, fontWeight: "700", color: "#2E7D32" },
   addBtnDisabled: { borderColor: colors.textMuted },
   comingSoonText: {
-    fontSize: 10.5,
+    fontSize: 10,
     color: colors.textMuted,
     fontWeight: "600",
-    marginTop: 2,
+    marginTop: 1,
   },
 });

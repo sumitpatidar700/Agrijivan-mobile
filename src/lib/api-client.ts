@@ -1,5 +1,4 @@
-export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || "http://localhost:3001/api";
+export const API_BASE_URL = "https://agrijivan-backend.vercel.app/api";
 
 export async function apiFetch<T = any>(
   path: string,

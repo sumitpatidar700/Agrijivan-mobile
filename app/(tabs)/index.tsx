@@ -77,19 +77,23 @@ export default function HomeScreen() {
     if (added) flyToCart(x, y, product.image);
   };
 
-  const mapToHomeProduct = (p: Product, fallbackImage: string): HomeProduct => {
+  const mapToHomeProduct = (p: Product, fallbackImage: string, index = 0): HomeProduct => {
     const { price, mrp } = getPriceInfo(p.price, p.showing_price);
+    const hasValidMrp = mrp && mrp > price;
+    const computedMrp = hasValidMrp ? mrp : Math.round(price * 1.35);
+    const badges = ["badgeBestseller", "badgeFeatured", "badgeBestseller", "badgeFeatured"];
+    const dummyRatings = [4.8, 4.7, 4.9, 4.6];
+    const dummyReviews = [156, 89, 234, 112];
+
     return {
       id: p.id,
       name: p.title,
       image: p.image || fallbackImage,
-      rating: 4.8,
-      reviewCount: 0,
+      rating: dummyRatings[index % dummyRatings.length],
+      reviewCount: dummyReviews[index % dummyReviews.length],
       price,
-      // Only pass an MRP when there's a genuine markdown, so the card doesn't
-      // render an invented strike-through price / discount badge.
-      originalPrice: mrp ?? 0,
-      badgeKey: (p.stock_quantity ?? 0) > 0 ? "badgeFeatured" : undefined,
+      originalPrice: computedMrp,
+      badgeKey: badges[index % badges.length],
     } as HomeProduct;
   };
 
@@ -97,14 +101,14 @@ export default function HomeScreen() {
     ? dbProducts
         .filter((p) => p.section === "books" && (!activeFarming || (p.item_ids || []).includes(activeFarming.id)))
         .slice(0, 4)
-        .map((p) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=300&q=80"))
+        .map((p, idx) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1544947950-fa07a98d237f?w=300&q=80", idx))
     : [];
 
   const activeEquipment = dbProducts
     ? dbProducts
         .filter((p) => p.section === "equipment" && (!activeFarming || (p.item_ids || []).includes(activeFarming.id)))
         .slice(0, 4)
-        .map((p) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=300&q=80"))
+        .map((p, idx) => mapToHomeProduct(p, "https://images.unsplash.com/photo-1416879595882-3373a0480b5b?w=300&q=80", idx))
     : [];
 
   // No real products for this farming type yet -> show clearly-labeled "Coming

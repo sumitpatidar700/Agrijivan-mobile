@@ -1,522 +1,76 @@
-import React, { useEffect, useState } from "react";
-import {
-  ActivityIndicator,
-  Pressable,
-  StyleSheet,
-  Text,
-  TextInput,
-  View,
-  ScrollView,
-  KeyboardAvoidingView,
-  Platform,
-  Keyboard,
-  TouchableWithoutFeedback,
-} from "react-native";
+import React, { useState } from "react";
+import { ActivityIndicator, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View } from "react-native";
 import { Ionicons } from "@expo/vector-icons";
-
-import AsyncStorage from "@react-native-async-storage/async-storage";
-import { apiGet } from "@/lib/api-client";
-import { getSupabaseClient } from "@/lib/supabase/client";
 import { colors, radius, shadow } from "@/lib/theme";
 import { useAuth } from "@/lib/auth-context";
 import { Logo } from "./logo";
 
-type LoginFormProps = {
-  onSuccess?: () => void;
-  isEmbedded?: boolean;
-};
+type LoginFormProps = { onSuccess?: () => void; isEmbedded?: boolean };
 
 export function LoginForm({ onSuccess, isEmbedded = false }: LoginFormProps) {
-  const { loginSimulated } = useAuth();
-  const nameRef = React.useRef<TextInput>(null);
-  const locationRef = React.useRef<TextInput>(null);
-  const mobileRef = React.useRef<TextInput>(null);
-  const emailRef = React.useRef<TextInput>(null);
-  const passwordRef = React.useRef<TextInput>(null);
-  const otpRef = React.useRef<TextInput>(null);
-
-  const dismissAndBlur = () => {
-    Keyboard.dismiss();
-    nameRef.current?.blur();
-    locationRef.current?.blur();
-    mobileRef.current?.blur();
-    emailRef.current?.blur();
-    passwordRef.current?.blur();
-    otpRef.current?.blur();
-  };
-  const [isSignUp, setIsSignUp] = useState(false);
+  const { loginWithoutOtp } = useAuth();
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
-
   const [name, setName] = useState("");
   const [location, setLocation] = useState("");
   const [mobile, setMobile] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-
-  const [otp, setOtp] = useState("");
-  const [otpDigits, setOtpDigits] = useState<string[]>(["", "", "", "", "", ""]);
-  const [focusedIndex, setFocusedIndex] = useState<number | null>(null);
-  const otpRefs = React.useRef<(TextInput | null)[]>([]);
-  const [otpSent, setOtpSent] = useState(false);
-  const [otpLoading, setOtpLoading] = useState(false);
-
-  const [signInWithMobile, setSignInWithMobile] = useState(true);
-
-  const supabase = getSupabaseClient();
-
-  const fetchProfileByPhone = async (phone: string) => {
-    return apiGet<any>(`/content/profiles/phone/${encodeURIComponent(phone)}`).catch(() => null);
-  };
-
-  const fetchProfileByEmail = async (userEmail: string) => {
-    return apiGet<any>(`/content/profiles/email/${encodeURIComponent(userEmail)}`).catch(() => null);
-  };
-
-  const handleSendOtp = async () => {
-    if (!mobile) {
-      setErrorMsg("Please enter your mobile number.");
-      return;
-    }
-    if (isSignUp && (!name || !location)) {
-      setErrorMsg("Please enter your name and location.");
-      return;
-    }
-
-    setOtpLoading(true);
-    setErrorMsg(null);
-
-    try {
-      const formattedMobile = mobile.startsWith("+") ? mobile : `+91${mobile}`;
-
-      if (!isSignUp) {
-        let isRegistered = false;
-        let registeredUser: any = null;
-
-        const remoteProfile = await fetchProfileByPhone(formattedMobile);
-        if (remoteProfile) {
-          isRegistered = true;
-          registeredUser = remoteProfile;
-        }
-
-        if (!isRegistered) {
-          try {
-            const localProfilesStr = await AsyncStorage.getItem("local_profiles");
-            if (localProfilesStr) {
-              const localProfiles = JSON.parse(localProfilesStr);
-              const found = localProfiles.find((p: any) => p.phone === formattedMobile);
-              if (found) {
-                isRegistered = true;
-                registeredUser = found;
-              }
-            }
-          } catch (err) {
-            console.warn("Local profiles lookup failed:", err);
-          }
-        }
-
-        if (!isRegistered) {
-          setErrorMsg("This mobile number is not registered. Please create an account first!");
-          setOtpLoading(false);
-          return;
-        }
-
-        setName(registeredUser.name || "");
-        setLocation(registeredUser.location || "");
-        setEmail(registeredUser.email || "");
-      }
-
-      if (isSignUp) {
-        let alreadyRegistered = false;
-        const remoteProfile = await fetchProfileByPhone(formattedMobile);
-        if (remoteProfile) {
-          alreadyRegistered = true;
-        }
-
-        if (!alreadyRegistered) {
-          try {
-            const localProfilesStr = await AsyncStorage.getItem("local_profiles");
-            if (localProfilesStr) {
-              const localProfiles = JSON.parse(localProfilesStr);
-              if (localProfiles.some((p: any) => p.phone === formattedMobile)) {
-                alreadyRegistered = true;
-              }
-            }
-          } catch (err) {}
-        }
-
-        if (alreadyRegistered) {
-          setErrorMsg("This mobile number is already registered. Please Sign In instead!");
-          setOtpLoading(false);
-          return;
-        }
-      }
-
-      if (!supabase) {
-        setErrorMsg("Database is not configured.");
-        setOtpLoading(false);
-        return;
-      }
-
-      const { error } = await supabase.auth.signInWithOtp({
-        phone: formattedMobile,
-        options: isSignUp
-          ? { shouldCreateUser: true, data: { name, phone: formattedMobile, role: "customer" } }
-          : { shouldCreateUser: false },
-      });
-
-      if (error) {
-        setErrorMsg(error.message || "Failed to send OTP.");
-        setOtpLoading(false);
-        return;
-      }
-
-      alert(`OTP code sent successfully to ${formattedMobile}!`);
-      setOtpSent(true);
-    } catch (err: any) {
-      setErrorMsg(err.message || "Failed to send OTP.");
-    } finally {
-      setOtpLoading(false);
-    }
-  };
 
   const handleSubmit = async () => {
-    if (!otpSent) {
-      setErrorMsg("Please click 'Send OTP' next to your mobile number first.");
-      return;
-    }
-
-    if (!otp || otp.length < 6) {
-      setErrorMsg("Please enter the 6-digit OTP code.");
-      return;
-    }
-
-    if (!supabase) {
-      setErrorMsg("Database is not configured.");
-      return;
-    }
-
+    if (loading) return;
+    if (!name.trim()) { setErrorMsg("Please enter your name."); return; }
+    if (!location.trim()) { setErrorMsg("Please enter your village or city."); return; }
+    if (!/^[6-9][0-9]{9}$/.test(mobile)) { setErrorMsg("Please enter a valid 10-digit Indian mobile number."); return; }
     setLoading(true);
     setErrorMsg(null);
-
+    Keyboard.dismiss();
     try {
-      if (isSignUp || (signInWithMobile && otpSent)) {
-        const formattedMobile = mobile.startsWith("+") ? mobile : `+91${mobile}`;
-
-        const { error: verifyError } = await supabase.auth.verifyOtp({
-          phone: formattedMobile,
-          token: otp,
-          type: "sms",
-        });
-
-        if (verifyError) {
-          console.error("[OTP verify] error:", verifyError);
-          throw new Error(
-            verifyError.message?.toLowerCase().includes("token")
-              ? "Invalid OTP code. Please try again."
-              : verifyError.message || "Invalid OTP code. Please try again."
-          );
-        }
-
-        // verifyOtp establishes a real Supabase session directly (creating the
-        // auth.users row + profiles row via the DB trigger for signups) -
-        // auth-context.tsx's onAuthStateChange listener picks it up automatically.
-        alert(isSignUp ? "Account created successfully! Welcome to AgriJivan." : "Account verified successfully! Welcome back to AgriJivan.");
-        onSuccess?.();
-      } else {
-        if (signInWithMobile) {
-          await handleSendOtp();
-        } else {
-          if (!email || !password) {
-            setErrorMsg("Please fill in all fields.");
-            setLoading(false);
-            return;
-          }
-          let signedIn = false;
-          if (supabase) {
-            const { error } = await supabase.auth.signInWithPassword({
-              email,
-              password,
-            });
-            if (!error) {
-              signedIn = true;
-            } else {
-              console.warn("Supabase auth failed, running simulated fallback:", error.message);
-            }
-          }
-
-          if (!signedIn) {
-            let isRegistered = false;
-            let registeredUser: any = null;
-
-            const remoteProfile = await fetchProfileByEmail(email);
-            if (remoteProfile) {
-              isRegistered = true;
-              registeredUser = remoteProfile;
-            }
-
-            if (!isRegistered) {
-              try {
-                const localProfilesStr = await AsyncStorage.getItem("local_profiles");
-                if (localProfilesStr) {
-                  const localProfiles = JSON.parse(localProfilesStr);
-                  const found = localProfiles.find((p: any) => p.email === email);
-                  if (found) {
-                    isRegistered = true;
-                    registeredUser = found;
-                  }
-                }
-              } catch (err) {}
-            }
-
-            if (!isRegistered) {
-              setErrorMsg("This email is not registered. Please create an account first!");
-              setLoading(false);
-              return;
-            }
-
-            await loginSimulated(email, registeredUser.phone || "", registeredUser.name || email.split("@")[0], registeredUser.location || "Advisory Hub");
-          }
-          onSuccess?.();
-        }
-      }
-    } catch (err: any) {
-      setErrorMsg(err.message || "Authentication failed.");
+      await loginWithoutOtp("+91" + mobile, name.trim(), location.trim());
+      onSuccess?.();
+    } catch {
+      setErrorMsg("Could not continue. Please try again.");
     } finally {
       setLoading(false);
     }
   };
 
-  const handleToggleMode = () => {
-    setIsSignUp(!isSignUp);
-    setOtpSent(false);
-    setErrorMsg(null);
-    setOtpDigits(["", "", "", "", "", ""]);
-    setOtp("");
-  };
-
-  const handleDigitChange = (value: string, index: number) => {
-    if (value.length > 1) {
-      const pasted = value.replace(/[^0-9]/g, "").slice(0, 6);
-      const nextDigits = [...otpDigits];
-      for (let i = 0; i < pasted.length; i++) {
-        if (index + i < 6) {
-          nextDigits[index + i] = pasted[i];
-        }
-      }
-      setOtpDigits(nextDigits);
-      setOtp(nextDigits.join(""));
-      const targetFocus = Math.min(index + pasted.length, 5);
-      otpRefs.current[targetFocus]?.focus();
-      return;
-    }
-
-    const nextDigits = [...otpDigits];
-    const cleanValue = value.replace(/[^0-9]/g, "");
-    nextDigits[index] = cleanValue;
-    setOtpDigits(nextDigits);
-    setOtp(nextDigits.join(""));
-
-    if (cleanValue && index < 5) {
-      otpRefs.current[index + 1]?.focus();
-    }
-  };
-
-  const handleKeyPress = (e: any, index: number) => {
-    if (e.nativeEvent.key === "Backspace") {
-      if (!otpDigits[index] && index > 0) {
-        const nextDigits = [...otpDigits];
-        nextDigits[index - 1] = "";
-        setOtpDigits(nextDigits);
-        setOtp(nextDigits.join(""));
-        otpRefs.current[index - 1]?.focus();
-      }
-    }
-  };
-
-  const renderFormContent = () => (
-    <View style={isEmbedded ? { flex: 1, justifyContent: "space-between" } : styles.formCard}>
-      <View style={{ flex: 1 }}>
-        <View style={styles.header}>
-          {!isEmbedded && (
-            <View style={styles.logoBadge}>
-              <Logo width={48} height={48} />
-            </View>
-          )}
-          <Text style={styles.title}>{isSignUp ? "Create Account" : "Login"}</Text>
-          <Text style={styles.subtitle}>
-            {isSignUp
-              ? "Sign up to start buying agriculture products & access farming guides"
-              : "Sign in to access your orders and profile"
-            }
-          </Text>
-        </View>
-
-        {errorMsg && (
-          <View style={styles.errorContainer}>
-            <Ionicons name="alert-circle" size={18} color={colors.red} />
-            <Text style={styles.errorText}>{errorMsg}</Text>
-          </View>
-        )}
-
-        {isSignUp && !otpSent && (
-          <>
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Farmer Name</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="person-outline" size={18} color={colors.textMuted} />
-                <TextInput
-                  ref={nameRef}
-                  style={styles.input}
-                  placeholder="Enter Full Name"
-                  placeholderTextColor={colors.textMuted}
-                  value={name}
-                  onChangeText={setName}
-                  autoCapitalize="words"
-                />
-              </View>
-            </View>
-
-            <View style={styles.inputContainer}>
-              <Text style={styles.label}>Location or Village</Text>
-              <View style={styles.inputWrapper}>
-                <Ionicons name="location-outline" size={18} color={colors.textMuted} />
-                <TextInput
-                  ref={locationRef}
-                  style={styles.input}
-                  placeholder="Village, City or State"
-                  placeholderTextColor={colors.textMuted}
-                  value={location}
-                  onChangeText={setLocation}
-                />
-              </View>
-            </View>
-          </>
-        )}
-
-        {(isSignUp || signInWithMobile) && (
-          <View style={styles.inputContainer}>
-            <Text style={styles.label}>Mobile Number</Text>
-            <View style={styles.mobileRow}>
-              <View style={[styles.inputWrapper, { flex: 1 }]}>
-                <Ionicons name="call-outline" size={18} color={colors.textMuted} />
-                <Text style={styles.countryCodePrefix}>+91</Text>
-                <TextInput
-                  ref={mobileRef}
-                  style={styles.input}
-                  placeholder="10-digit Mobile Number"
-                  placeholderTextColor={colors.textMuted}
-                  value={mobile}
-                  onChangeText={(text) => {
-                    setMobile(text.replace(/[^0-9]/g, ""));
-                    if (otpSent) {
-                      setOtpSent(false);
-                      setOtpDigits(["", "", "", "", "", ""]);
-                      setOtp("");
-                    }
-                  }}
-                  keyboardType="numeric"
-                  maxLength={10}
-                />
-              </View>
-
-              <Pressable
-                style={[
-                  styles.inlineSendBtn,
-                  (otpLoading || mobile.length !== 10) && styles.inlineSendBtnDisabled,
-                  otpSent && styles.inlineSendBtnSent
-                ]}
-                onPress={handleSendOtp}
-                disabled={otpLoading || mobile.length !== 10}
-              >
-                {otpLoading ? (
-                  <ActivityIndicator size="small" color={colors.surface} />
-                ) : (
-                  <Text style={styles.inlineSendBtnText}>
-                    {otpSent ? "Resend" : "Send OTP"}
-                  </Text>
-                )}
-              </Pressable>
-            </View>
-          </View>
-        )}
-
-        <View style={styles.inputContainer}>
-          <Text style={styles.label}>Enter 6-Digit OTP Code</Text>
-          <View style={styles.otpGrid}>
-            {otpDigits.map((digit, idx) => (
-              <TextInput
-                key={idx}
-                ref={(el) => { otpRefs.current[idx] = el; }}
-                style={[
-                  styles.otpBox,
-                  focusedIndex === idx && styles.otpBoxFocused,
-                  !otpSent && styles.otpBoxDisabled
-                ]}
-                value={digit}
-                onChangeText={(val) => handleDigitChange(val, idx)}
-                onKeyPress={(e) => handleKeyPress(e, idx)}
-                onFocus={() => setFocusedIndex(idx)}
-                onBlur={() => setFocusedIndex(null)}
-                keyboardType="numeric"
-                maxLength={2}
-                selectTextOnFocus
-                editable={otpSent}
-              />
-            ))}
-          </View>
-        </View>
-
-        <Pressable
-          style={[
-            styles.submitButton,
-            (loading || !otpSent || otp.length !== 6) && styles.submitButtonDisabled
-          ]}
-          onPress={handleSubmit}
-          disabled={loading || !otpSent || otp.length !== 6}
-        >
-          {loading ? (
-            <ActivityIndicator size="small" color={colors.surface} />
-          ) : (
-            <Text style={styles.submitButtonText}>
-              {isSignUp ? "Verify & Sign Up" : "Verify & Sign In"}
-            </Text>
-          )}
-        </Pressable>
+  const content = (
+    <View style={isEmbedded ? { flex: 1 } : styles.formCard}>
+      <View style={styles.header}>
+        {!isEmbedded && <View style={styles.logoBadge}><Logo width={48} height={48} /></View>}
+        <Text style={styles.title}>Welcome to AgriJivan</Text>
+        <Text style={styles.subtitle}>Enter your details to explore farming guides and products. No OTP required.</Text>
+        <Text style={styles.subtitle}>Temporary guest access. Your existing account is not signed in.</Text>
       </View>
-
-      <Pressable style={styles.toggleBtn} onPress={handleToggleMode}>
-        <Text style={styles.toggleText}>
-          {isSignUp
-            ? "Already have an account? Sign In"
-            : "Don't have account? Sign Up"
-          }
-        </Text>
+      {errorMsg && <View style={styles.errorContainer} accessibilityLiveRegion="polite"><Ionicons name="alert-circle" size={18} color={colors.red} /><Text style={styles.errorText}>{errorMsg}</Text></View>}
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Farmer Name</Text>
+        <View style={styles.inputWrapper}>
+          <Ionicons name="person-outline" size={18} color={colors.textMuted} />
+          <TextInput accessibilityLabel="Farmer Name" style={styles.input} placeholder="Enter Full Name" placeholderTextColor={colors.textMuted} value={name} onChangeText={setName} autoCapitalize="words" editable={!loading} />
+        </View>
+      </View>
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Location or Village</Text>
+        <View style={styles.inputWrapper}>
+          <Ionicons name="location-outline" size={18} color={colors.textMuted} />
+          <TextInput accessibilityLabel="Location or Village" style={styles.input} placeholder="Village, City or State" placeholderTextColor={colors.textMuted} value={location} onChangeText={setLocation} editable={!loading} />
+        </View>
+      </View>
+      <View style={styles.inputContainer}>
+        <Text style={styles.label}>Mobile Number</Text>
+        <View style={styles.inputWrapper}>
+          <Ionicons name="call-outline" size={18} color={colors.textMuted} />
+          <Text style={styles.countryCodePrefix}>+91</Text>
+          <TextInput accessibilityLabel="10-digit Mobile Number" style={styles.input} placeholder="10-digit Mobile Number" placeholderTextColor={colors.textMuted} value={mobile} onChangeText={(value) => setMobile(value.replace(/[^0-9]/g, ""))} keyboardType="phone-pad" maxLength={10} editable={!loading} />
+        </View>
+      </View>
+      <Pressable accessibilityRole="button" accessibilityState={{ disabled: loading, busy: loading }} style={[styles.submitButton, loading && styles.submitButtonDisabled]} onPress={handleSubmit} disabled={loading}>
+        {loading ? <ActivityIndicator color={colors.surface} /> : <Text style={styles.submitButtonText}>Continue without OTP</Text>}
       </Pressable>
     </View>
   );
-
-  if (isEmbedded) {
-    return renderFormContent();
-  }
-
-  return (
-    <KeyboardAvoidingView
-      behavior={Platform.OS === "ios" ? "padding" : "padding"}
-      style={styles.container}
-      keyboardVerticalOffset={Platform.OS === "ios" ? 64 : 20}
-    >
-      <ScrollView
-        contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }}
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-      >
-        <Pressable style={{ flex: 1, width: "100%", justifyContent: "center" }} onPress={dismissAndBlur}>
-          {renderFormContent()}
-        </Pressable>
-      </ScrollView>
-    </KeyboardAvoidingView>
-  );
+  if (isEmbedded) return content;
+  return <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.container}><ScrollView contentContainerStyle={{ flexGrow: 1, justifyContent: "center" }} keyboardShouldPersistTaps="handled">{content}</ScrollView></KeyboardAvoidingView>;
 }
 
 const styles = StyleSheet.create({

@@ -40,7 +40,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
   const [cartLoading, setCartLoading] = useState(true);
 
-  const userKey = (user as any)?.email || (user as any)?.phone || "guest";
+  const userKey = user?.user_metadata?.is_local_guest ? user.id : user?.email || user?.phone || "guest";
 
   const refreshCart = useCallback(async () => {
     if (!user) { setCartItems([]); setCartLoading(false); return; }
@@ -48,7 +48,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     try {
       // 1. Try to read from Supabase cart_items first
       const supabase = getSupabaseClient();
-      if (supabase) {
+      if (supabase && !user.user_metadata?.is_local_guest) {
         const { data, error } = await (supabase.from("cart_items") as any)
           .select("items")
           .eq("user_id", user.id)
@@ -83,7 +83,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     try {
       await AsyncStorage.setItem(`agrijivan-cart-${userKey}`, JSON.stringify(updated));
       const supabase = getSupabaseClient();
-      if (supabase && user) {
+      if (supabase && user && !user.user_metadata?.is_local_guest) {
         const { error } = await (supabase.from("cart_items") as any).upsert(
           {
             user_id: user.id,

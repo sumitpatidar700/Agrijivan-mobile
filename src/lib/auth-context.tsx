@@ -9,6 +9,7 @@ type AuthContextType = {
   session: Session | null;
   isLoading: boolean;
   logout: () => Promise<void>;
+  loginWithoutOtp: (phone: string, name: string, location: string) => Promise<void>;
   loginSimulated: (email: string, phone: string, name: string, location: string, userId?: string) => Promise<void>;
   preferences: { language: string; farming_items: string[] } | null;
   preferencesLoading: boolean;
@@ -84,7 +85,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (simUserStr) {
           const mockUser = JSON.parse(simUserStr);
           setUser(mockUser);
-          setSession({ user: mockUser } as any);
+          setSession(mockUser.user_metadata?.is_local_guest ? null : { user: mockUser } as any);
           setIsLoading(false);
           return;
         }
@@ -126,8 +127,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       }
 
       setPreferencesLoading(true);
-      const userKey = user.phone || user.email || user.id || "guest";
+      const userKey = user.user_metadata?.is_local_guest ? user.id : user.phone || user.email || user.id || "guest";
       const cacheKey = `@agrijivan_user_preferences_${userKey}`;
+
+      if (user.user_metadata?.is_local_guest) {
+        try {
+          const cached = await AsyncStorage.getItem(cacheKey);
+          const parsed = cached ? JSON.parse(cached) : null;
+          setPreferences(isValidPreferences(parsed) ? parsed : null);
+        } catch {
+          setPreferences(null);
+        } finally {
+          setPreferencesLoading(false);
+        }
+        return;
+      }
 
       try {
         const remoteProfile = await fetchRemoteProfile(user);
@@ -169,22 +183,46 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     loadPreferences();
   }, [user, supabase]);
 
+  const loginWithoutOtp = async (phone: string, name: string, location: string) => {
+    // A separate local identity never adopts a registered user's ID or profile.
+    const id = `local_${Date.now()}_${Math.random().toString(36).slice(2)}`;
+    const guestUser: User = {
+      id,
+      email: `${id}@guest.invalid`,
+      phone,
+      user_metadata: { name, location, is_local_guest: true },
+      app_metadata: {},
+      aud: "",
+      role: "anon",
+      created_at: new Date().toISOString(),
+    };
+    if (supabase) {
+      const { error } = await supabase.auth.signOut({ scope: "local" });
+      if (error) throw error;
+    }
+    await AsyncStorage.setItem("simulated_user", JSON.stringify(guestUser));
+    setPreferences(null);
+    setSession(null);
+    setUser(guestUser);
+  };
+
   const loginSimulated = async (email: string, phone: string, name: string, location: string, userId?: string) => {
     const mockUser: User = {
-      id: userId || buildSimulatedUserId(email, phone),
+      id: user?.user_metadata?.is_local_guest ? user.id : userId || buildSimulatedUserId(email, phone),
       email: email || `${phone}@agrijivan.com`,
       phone: phone,
       user_metadata: {
         name,
         location,
+        ...(user?.user_metadata?.is_local_guest ? { is_local_guest: true } : {}),
       },
-      aud: "authenticated",
-      role: "authenticated",
+      aud: user?.user_metadata?.is_local_guest ? "" : "authenticated",
+      role: user?.user_metadata?.is_local_guest ? "anon" : "authenticated",
       created_at: new Date().toISOString(),
     } as any;
 
     setUser(mockUser);
-    setSession({ user: mockUser } as any);
+    setSession(mockUser.user_metadata?.is_local_guest ? null : { user: mockUser } as any);
     try {
       await AsyncStorage.setItem("simulated_user", JSON.stringify(mockUser));
     } catch (err) {
@@ -212,9 +250,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const prefs = { language, farming_items };
     setPreferences(prefs);
 
-    const userKey = user.phone || user.email || user.id || "guest";
+    const userKey = user.user_metadata?.is_local_guest ? user.id : user.phone || user.email || user.id || "guest";
     const cacheKey = `@agrijivan_user_preferences_${userKey}`;
     await AsyncStorage.setItem(cacheKey, JSON.stringify(prefs));
+
+    if (user.user_metadata?.is_local_guest) return;
 
     const existingProfile = await fetchRemoteProfile(user).catch(() => null);
 
@@ -243,6 +283,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         isLoading,
         logout,
         loginSimulated,
+        loginWithoutOtp,
         preferences,
         preferencesLoading,
         savePreferences,
